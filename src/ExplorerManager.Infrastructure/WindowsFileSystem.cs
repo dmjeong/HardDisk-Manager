@@ -35,7 +35,7 @@ namespace ExplorerManager.Infrastructure
             foreach (var root in new[] { Environment.GetFolderPath(Environment.SpecialFolder.Windows),
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ExplorerManager"),
-                Path.Combine(volumeRoot, "Windows"), Path.Combine(volumeRoot, "Program Files"), Path.Combine(volumeRoot, "Program Files (x86")) })
+                Path.Combine(volumeRoot, "Windows"), Path.Combine(volumeRoot, "Program Files"), Path.Combine(volumeRoot, "Program Files (x86)") })
                 if (!string.IsNullOrEmpty(root) && Within(path, root)) return true;
             var parts = path.Split('\\');
             return parts.Any(x => x.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase) ||
