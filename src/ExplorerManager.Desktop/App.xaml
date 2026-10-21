@@ -12,7 +12,10 @@
   <Style TargetType="ComboBox"><Setter Property="Margin" Value="3"/><Setter Property="Padding" Value="7,6"/><Setter Property="MinWidth" Value="120"/><Setter Property="Foreground" Value="#162435"/></Style>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="#E9F0F8"/><Setter Property="Margin" Value="6"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
   <Style TargetType="TabControl"><Setter Property="Background" Value="#111E2E"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12"/></Style>
-  <Style TargetType="TabItem"><Setter Property="Padding" Value="18,10"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#12243B"/></Style>
+  <Style TargetType="TabItem">
+   <Setter Property="Padding" Value="18,10"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#E9F0F8"/>
+   <Setter Property="HeaderTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" Foreground="#12243B"/></DataTemplate></Setter.Value></Setter>
+  </Style>
   <Style TargetType="DataGrid"><Setter Property="Background" Value="#F2F6FB"/><Setter Property="Foreground" Value="#12243B"/><Setter Property="RowBackground" Value="White"/><Setter Property="AlternatingRowBackground" Value="#E7EEF6"/><Setter Property="AutoGenerateColumns" Value="False"/><Setter Property="IsReadOnly" Value="True"/><Setter Property="CanUserAddRows" Value="False"/><Setter Property="EnableRowVirtualization" Value="True"/><Setter Property="EnableColumnVirtualization" Value="True"/><Setter Property="HeadersVisibility" Value="Column"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="RowHeight" Value="32"/><Setter Property="BorderThickness" Value="0"/><Setter Property="SelectionMode" Value="Single"/></Style>
   <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#CBD9E8"/><Setter Property="Foreground" Value="#12243B"/><Setter Property="Padding" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
   <Style TargetType="GroupBox"><Setter Property="Foreground" Value="#E9F0F8"/><Setter Property="BorderBrush" Value="#31465E"/><Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="12"/></Style>

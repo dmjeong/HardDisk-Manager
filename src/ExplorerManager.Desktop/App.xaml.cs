@@ -46,7 +46,7 @@ namespace ExplorerManager.Desktop
                 PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
                 PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
                 var finish = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
-                finish.Tick += (s, a) =>
+                finish.Tick += async (s, a) =>
                 {
                     finish.Stop();
                     try
@@ -56,11 +56,18 @@ namespace ExplorerManager.Desktop
                         int at = Array.IndexOf(e.Args, "--screenshot");
                         if (at >= 0 && at + 1 < e.Args.Length)
                         {
-                            window.UpdateLayout();
-                            var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                            bitmap.Render(window);
-                            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                            using (var file = File.Create(e.Args[at + 1])) encoder.Save(file);
+                            string screenshot = Path.GetFullPath(e.Args[at + 1]);
+                            for (int index = 0; index < window.Sections.Items.Count; index++)
+                            {
+                                window.Sections.SelectedIndex = index;
+                                await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
+                                string path = index == 0 ? screenshot : Path.Combine(outputDirectory,
+                                    Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
+                                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                                bitmap.Render(window);
+                                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                                using (var file = File.Create(path)) encoder.Save(file);
+                            }
                         }
                         listener.Flush(); string errors = bindingOutput.ToString();
                         if (!string.IsNullOrWhiteSpace(errors)) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-binding-errors.log"), errors); _exit = true; Shutdown(2); return; }
