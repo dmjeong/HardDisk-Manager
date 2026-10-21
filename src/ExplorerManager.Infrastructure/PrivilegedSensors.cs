@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using ExplorerManager.Contracts;
@@ -18,7 +19,7 @@ namespace ExplorerManager.Infrastructure
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 timeout.CancelAfter(3000);
-                using (var pipe = new NamedPipeClientStream(".", "ExplorerManager.Sensors.v1", PipeDirection.InOut, PipeOptions.Asynchronous))
+                using (var pipe = new NamedPipeClientStream(".", "ExplorerManager.Sensors.v1", PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation))
                 {
                     await pipe.ConnectAsync(1000, timeout.Token).ConfigureAwait(false);
                     using (timeout.Token.Register(() => pipe.Dispose()))

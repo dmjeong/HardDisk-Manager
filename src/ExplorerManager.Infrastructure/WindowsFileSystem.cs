@@ -24,7 +24,8 @@ namespace ExplorerManager.Infrastructure
             path = NativeMethods.Plain(path);
             if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.Length < 3 || path[1] != ':' || path[2] != '\\' || path.IndexOf(':', 2) >= 0)
                 throw new ArgumentException("로컬 절대 NTFS 경로만 지원합니다.");
-            return Path.GetFullPath(path).TrimEnd('\\');
+            string full = Path.GetFullPath(path);
+            return full.Length == 3 ? full : full.TrimEnd('\\');
         }
         public static bool Within(string path, string root) => string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
@@ -118,7 +119,7 @@ namespace ExplorerManager.Infrastructure
                 {
                     using (var guards = new DirectoryGuards(dir.Item1))
                     {
-                        string[] children = Directory.GetFileSystemEntries(NativeMethods.LongPath(dir.Item1));
+                        var children = Directory.EnumerateFileSystemEntries(NativeMethods.LongPath(dir.Item1));
                         foreach (string raw in children)
                         {
                             cancellation.ThrowIfCancellationRequested();
@@ -126,7 +127,17 @@ namespace ExplorerManager.Infrastructure
                             if (PathGuard.Excluded(path, p)) { skipped++; continue; }
                             FileSnapshot f;
                             try { f = Snapshot(path, dir.Item2, p, false); }
-                            catch (Exception ex) when (ex is IOException || ex is Win32Exception || ex is UnauthorizedAccessException) { skipped++; continue; }
+                            catch (Exception ex) when (ex is IOException || ex is Win32Exception || ex is UnauthorizedAccessException)
+                            {
+                                skipped++;
+                                int error = ex is Win32Exception ? ((Win32Exception)ex).NativeErrorCode : ex.HResult & 0xffff;
+                                journal.RecordItem(new ItemRecord { RunId = runId, PolicyId = p.Id, Utc = DateTime.UtcNow, Actor = "Scanner",
+                                    File = new FileSnapshot { Path = path, Root = dir.Item2, VolumeId = p.VolumeId }, State = "Skipped", Reason = ex.Message, ErrorCode = error });
+                                if (error == 32 || error == 33) journal.SaveAlert(new AlertRecord { Utc = DateTime.UtcNow, Category = "LockedFile",
+                                    Severity = "Warning", PolicyId = p.Id, Path = path, Message = "사용 중인 항목의 메타데이터를 읽지 못해 건너뛰었습니다.",
+                                    Processes = new RestartManagerInspector().Inspect(path).ToList() });
+                                continue;
+                            }
                             visited++;
                             if (f.UnsupportedReason != null) { skipped++; continue; }
                             if (f.IsDirectory)
@@ -353,6 +364,15 @@ namespace ExplorerManager.Infrastructure
         {
             long created = original.CreationUtc.ToFileTimeUtc(), modified = original.LastWriteUtc.ToFileTimeUtc();
             NativeMethods.Check(NativeMethods.SetFileTime(handle, ref created, IntPtr.Zero, ref modified));
+            IntPtr basic = Marshal.AllocHGlobal(40);
+            try
+            {
+                for (int i = 0; i < 40; i++) Marshal.WriteByte(basic, i, 0);
+                int attributes = original.Attributes & 0x2120;
+                Marshal.WriteInt32(basic, 32, attributes == 0 ? 0x80 : attributes);
+                NativeMethods.Check(NativeMethods.SetFileInformationByHandle(handle, 0, basic, 40));
+            }
+            finally { Marshal.FreeHGlobal(basic); }
             NativeMethods.ApplyDacl(handle, original.Dacl);
             byte[] name = Encoding.Unicode.GetBytes(NativeMethods.LongPath(target));
             IntPtr info = Marshal.AllocHGlobal(20 + name.Length);

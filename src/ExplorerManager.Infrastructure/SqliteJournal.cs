@@ -14,14 +14,29 @@ namespace ExplorerManager.Infrastructure
     {
         private readonly object _sync = new object();
         private readonly SqliteConnection _db;
+        private readonly SqliteConnection _scan;
         public SqliteJournal(string path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
             _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
             _db.Open();
+            using (var version = _db.CreateCommand())
+            {
+                version.CommandText = "PRAGMA user_version";
+                if (Convert.ToInt32(version.ExecuteScalar()) > 1) { _db.Dispose(); throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요."); }
+            }
+            _scan = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path + ".scan", Pooling = false }.ToString());
+            _scan.Open();
+            using (var setup = _scan.CreateCommand())
+            {
+                setup.CommandText = @"PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF;
+CREATE TABLE IF NOT EXISTS candidates (runid TEXT NOT NULL, path TEXT NOT NULL, age TEXT NOT NULL, bytes INTEGER NOT NULL, processed INTEGER NOT NULL DEFAULT 0, json TEXT NOT NULL, PRIMARY KEY(runid,path));
+CREATE INDEX IF NOT EXISTS candidates_next ON candidates(runid,processed,age,path);";
+                setup.ExecuteNonQuery();
+            }
             using (var cmd = _db.CreateCommand())
             {
-                cmd.CommandText = @"PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+                cmd.CommandText = @"PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS policies (id TEXT PRIMARY KEY, version INTEGER NOT NULL, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, utc TEXT NOT NULL, json TEXT NOT NULL);
@@ -43,7 +58,7 @@ PRAGMA user_version=1;";
         private static T Parse<T>(string s) => JsonConvert.DeserializeObject<T>(s, Protocol.Json);
         private SqliteCommand Command(string sql, params object[] values)
         {
-            var c = _db.CreateCommand(); c.CommandText = sql;
+            var c = sql.IndexOf("candidates", StringComparison.OrdinalIgnoreCase) >= 0 ? _scan.CreateCommand() : _db.CreateCommand(); c.CommandText = sql;
             for (int i = 0; i < values.Length; i++) c.Parameters.AddWithValue("$" + i, values[i] ?? DBNull.Value);
             return c;
         }
@@ -131,6 +146,8 @@ PRAGMA user_version=1;";
         public void ClearCandidates(string runId) { lock (_sync) Exec("DELETE FROM candidates WHERE runid=$0", runId); }
         public void SaveAlert(AlertRecord a) { lock (_sync) Exec("INSERT OR REPLACE INTO alerts VALUES($0,$1,$2,$3)", a.Id, a.Utc.ToString("O"), a.Acknowledged ? 1 : 0, Json(a)); }
         public List<AlertRecord> Alerts() { lock (_sync) return Read<AlertRecord>("SELECT json FROM alerts ORDER BY ack,utc DESC LIMIT 100"); }
+        public List<AlertRecord> CriticalAlerts()
+        { lock (_sync) return Read<AlertRecord>("SELECT json FROM alerts WHERE ack=0 AND json_extract(json,'$.Severity')='Critical'"); }
         public AlertRecord Alert(string id) { lock (_sync) return Read<AlertRecord>("SELECT json FROM alerts WHERE id=$0", id).FirstOrDefault(); }
         public void SetRecoveryState(string id, string state)
         {
@@ -155,6 +172,27 @@ PRAGMA user_version=1;";
                 var list = Read<ItemRecord>(@"SELECT json FROM items WHERE path LIKE $0 ESCAPE '\' AND ($1 IS NULL OR runid=$1) ORDER BY utc DESC,id LIMIT 101 OFFSET $2",
                     "%" + escaped + "%", runId, Math.Max(0, offset));
                 return new HistoryPage { Items = list.Take(100).ToList(), HasMore = list.Count > 100, Offset = offset };
+            }
+        }
+        public List<FolderSummary> Folders(string filter, int offset)
+        {
+            lock (_sync)
+            {
+                var result = new List<FolderSummary>();
+                string escaped = (filter ?? "").Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
+                using (var c = Command(@"SELECT
+CASE WHEN json_extract(json,'$.File.IsDirectory')=1 THEN path ELSE coalesce(json_extract(json,'$.File.ParentPath'),path) END AS folder,
+runid,
+sum(CASE WHEN json_extract(json,'$.File.IsDirectory')=0 THEN 1 ELSE 0 END),
+sum(CASE WHEN json_extract(json,'$.File.IsDirectory')=1 THEN 1 ELSE 0 END),
+sum(CASE WHEN json_extract(json,'$.File.IsDirectory')=0 THEN coalesce(json_extract(json,'$.File.Length'),0) ELSE 0 END),
+coalesce(sum(json_extract(json,'$.ObservedFreeDelta')),0)
+FROM items WHERE state='DeletedConfirmed' AND path LIKE $0 ESCAPE '\'
+GROUP BY folder,runid ORDER BY max(utc) DESC LIMIT 100 OFFSET $1", "%" + escaped + "%", offset))
+                using (var r = c.ExecuteReader())
+                    while (r.Read()) result.Add(new FolderSummary { Path = r.GetString(0), RunId = r.GetString(1), DeletedFiles = r.GetInt32(2),
+                        DeletedDirectories = r.GetInt32(3), LogicalBytes = r.GetInt64(4), ObservedFreeDelta = r.GetInt64(5) });
+                return result;
             }
         }
         public void Reconcile()
@@ -189,11 +227,30 @@ ON CONFLICT(bucket,entity,name) DO UPDATE SET sum=sum+excluded.sum,min=min(min,e
                 Exec("DELETE FROM runs WHERE utc<$0 AND id NOT IN (SELECT runid FROM items)", cutoff);
                 Exec("DELETE FROM alerts WHERE utc<$0 AND ack=1", cutoff);
                 Exec("DELETE FROM events WHERE utc<$0", cutoff);
+                Exec("DELETE FROM requests WHERE utc<$0", DateTime.UtcNow.AddDays(-1).ToString("O"));
                 Exec("DELETE FROM protection WHERE untilutc<$0", DateTime.UtcNow.ToString("O"));
                 Exec("DELETE FROM metrics WHERE bucket<$0", DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-ddTHH:mm:00Z"));
                 Exec("PRAGMA wal_checkpoint(TRUNCATE)");
+                // Bound live audit data; retain pending intents and current recovery metadata.
+                for (int pass = 0; pass < 100 && LiveDatabaseBytes() > settings.HistoryMaxBytes; pass++)
+                {
+                    Exec("DELETE FROM items WHERE id IN (SELECT id FROM items WHERE recovery NOT IN ('Recoverable','OutcomeUnknown','CacheReady') AND state NOT IN ('DeleteIntent','DeleteRequested') ORDER BY utc LIMIT 1000)");
+                    Exec("DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY id LIMIT 1000)");
+                    Exec("DELETE FROM runs WHERE id NOT IN (SELECT runid FROM items) AND utc<$0", DateTime.UtcNow.AddDays(-1).ToString("O"));
+                    Exec("PRAGMA incremental_vacuum(1000)");
+                }
+                Exec("PRAGMA wal_checkpoint(TRUNCATE)");
             }
         }
-        public void Dispose() { lock (_sync) _db.Dispose(); }
+        private long LiveDatabaseBytes()
+        {
+            using (var c = Command("PRAGMA page_count"))
+            {
+                long pages = Convert.ToInt64(c.ExecuteScalar()); c.CommandText = "PRAGMA freelist_count";
+                pages -= Convert.ToInt64(c.ExecuteScalar()); c.CommandText = "PRAGMA page_size";
+                return pages * Convert.ToInt64(c.ExecuteScalar());
+            }
+        }
+        public void Dispose() { lock (_sync) { _scan.Dispose(); _db.Dispose(); } }
     }
 }

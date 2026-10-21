@@ -167,11 +167,12 @@ namespace ExplorerManager.Infrastructure
         {
             private RecoveryCache _owner;
             private readonly Entry _e;
-            public Lease(RecoveryCache owner, Entry e) { _owner = owner; _e = e; }
+            private readonly string _previousState;
+            public Lease(RecoveryCache owner, Entry e) { _owner = owner; _e = e; _previousState = e.Info.State; e.Info.State = "Restoring"; }
             public RecoveryInfo Info => Copy(_e.Info);
             public FileSnapshot Original => _e.File;
             public Stream OpenContent() => new BlocksStream(_e.Blocks, _e.File.Length);
-            public void Dispose() { if (_owner != null) { lock (_owner._sync) _e.Pinned = false; _owner = null; } }
+            public void Dispose() { if (_owner != null) { lock (_owner._sync) { _e.Pinned = false; _e.Info.State = _previousState; } _owner = null; } }
         }
         private sealed class BlocksStream : Stream
         {

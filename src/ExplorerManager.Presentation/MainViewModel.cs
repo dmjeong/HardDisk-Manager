@@ -82,6 +82,7 @@ namespace ExplorerManager.Presentation
         public ObservableCollection<Metric> Metrics { get; } = new ObservableCollection<Metric>();
         public ObservableCollection<AlertRecord> Alerts { get; } = new ObservableCollection<AlertRecord>();
         public ObservableCollection<ItemRecord> History { get; } = new ObservableCollection<ItemRecord>();
+        public ObservableCollection<FolderSummary> Folders { get; } = new ObservableCollection<FolderSummary>();
         public ObservableCollection<RecoveryInfo> Recovery { get; } = new ObservableCollection<RecoveryInfo>();
         public ObservableCollection<double> CpuSeries { get; } = new ObservableCollection<double>();
         public ThresholdMode[] Modes => (ThresholdMode[])Enum.GetValues(typeof(ThresholdMode));
@@ -197,6 +198,7 @@ namespace ExplorerManager.Presentation
         {
             var page = await _client.SendAsync<HistoryPage>("History", new { Filter, Offset = _historyOffset });
             Replace(History, page.Items); _more = page.HasMore; Changed(nameof(HistoryPageText));
+            Replace(Folders, await _client.SendAsync<FolderSummary[]>("Folders", new { Filter, Offset = _historyOffset }));
         }
         private async Task ExportAsync()
         {

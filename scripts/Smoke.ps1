@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 & "$repo/artifacts/Install.ps1" -InstallDirectory $InstallDirectory -NoStartUi -NoAutoStart
 try {
-    $pipe=[IO.Pipes.NamedPipeClientStream]::new('.','ExplorerManager.v1',[IO.Pipes.PipeDirection]::InOut)
+    $pipe=[IO.Pipes.NamedPipeClientStream]::new('.','ExplorerManager.v1',[IO.Pipes.PipeDirection]::InOut,[IO.Pipes.PipeOptions]::Asynchronous,[Security.Principal.TokenImpersonationLevel]::Impersonation)
     try {
         $pipe.Connect(15000)
         $id=[Guid]::NewGuid().ToString('N')

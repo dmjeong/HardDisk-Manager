@@ -92,6 +92,14 @@
      <Button Content="이전" Command="{Binding PreviousCommand}"/><Button Content="다음" Command="{Binding NextCommand}"/>
      <Button Content="현재 목록 CSV" Command="{Binding ExportCommand}"/><TextBlock Text="{Binding HistoryPageText}" Margin="12,0"/>
     </StackPanel>
+     <GroupBox DockPanel.Dock="Bottom" Header="폴더별 집계 · 여유 순변화에는 외부 I/O가 포함됩니다." Height="190" Margin="0,12,0,0">
+      <DataGrid ItemsSource="{Binding Folders}"><DataGrid.Columns>
+       <DataGridTextColumn Header="폴더 경로" Binding="{Binding Path}" Width="*"/>
+       <DataGridTextColumn Header="파일 수" Binding="{Binding DeletedFiles}" Width="85"/><DataGridTextColumn Header="폴더 수" Binding="{Binding DeletedDirectories}" Width="85"/>
+       <DataGridTextColumn Header="논리 삭제 바이트" Binding="{Binding LogicalBytes,StringFormat=N0}" Width="150"/>
+       <DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,StringFormat=N0}" Width="150"/>
+      </DataGrid.Columns></DataGrid>
+     </GroupBox>
      <DataGrid ItemsSource="{Binding History}" SelectedItem="{Binding SelectedItem}"><DataGrid.Columns>
       <DataGridTextColumn Header="UTC" Binding="{Binding Utc,StringFormat=MM-dd HH:mm:ss}" Width="120"/><DataGridTextColumn Header="종류" Binding="{Binding Kind}" Width="60"/>
       <DataGridTextColumn Header="경로" Binding="{Binding Path}" Width="*"/><DataGridTextColumn Header="상태" Binding="{Binding State}" Width="150"/>

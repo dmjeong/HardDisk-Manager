@@ -105,9 +105,21 @@ namespace ExplorerManager.Domain
         public string RecoveryState { get; set; } = "Unavailable";
         public string CacheId { get; set; }
         public string Actor { get; set; }
+        public long? FreeBefore { get; set; }
+        public long? FreeAfter { get; set; }
+        public long? ObservedFreeDelta => FreeAfter - FreeBefore;
         public string Path => File?.Path;
         public long Bytes => File?.Length ?? 0;
         public string Kind => File != null && File.IsDirectory ? "폴더" : "파일";
+    }
+    public sealed class FolderSummary
+    {
+        public string Path { get; set; }
+        public string RunId { get; set; }
+        public int DeletedFiles { get; set; }
+        public int DeletedDirectories { get; set; }
+        public long LogicalBytes { get; set; }
+        public long ObservedFreeDelta { get; set; }
     }
 
     public sealed class RecoveryInfo

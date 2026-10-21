@@ -75,7 +75,7 @@ namespace ExplorerManager.Infrastructure
             {
                 var volume = _volumes.Get(p.VolumeId);
                 var entities = volume.PhysicalDisks.Split(',').Select(x => "Disk" + x).ToList();
-                if (_store.Alerts().Any(a => !a.Acknowledged && a.Severity == "Critical" &&
+                if (_store.CriticalAlerts().Any(a => !a.Acknowledged && a.Severity == "Critical" &&
                     (a.Entity == p.VolumeId || entities.Contains(a.Entity) || a.Entity == "Storage"))) return "PausedByHealth";
             }
             return null;
@@ -138,7 +138,7 @@ namespace ExplorerManager.Infrastructure
             // Serializes command authorization/version checks and durable idempotency receipts.
             lock (_commands)
             {
-                bool query = new[] { "Dashboard", "History", "Recovery", "Settings" }.Contains(request.Command);
+                bool query = new[] { "Dashboard", "History", "Folders", "Recovery", "Settings" }.Contains(request.Command);
                 if (!caller.Operator) throw new UnauthorizedAccessException("관리자 권한으로 Explorer Manager를 실행하세요.");
                 string fingerprint;
                 using (var sha = SHA256.Create()) fingerprint = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(request.Command + request.Data.ToString(Formatting.None))));
@@ -180,6 +180,7 @@ namespace ExplorerManager.Infrastructure
                 case "Pause": _paused = true; lock (_sync) _active?.Cancel(); _store.RecordEvent("Paused", caller.Sid, "", ""); return true;
                 case "Resume": _paused = false; _health = "Ready"; _store.RecordEvent("Resumed", caller.Sid, "", ""); return true;
                 case "History": return _store.History((string)d["Filter"], Math.Min(1000000, Math.Max(0, (int?)d["Offset"] ?? 0)), (string)d["RunId"]);
+                case "Folders": return _store.Folders((string)d["Filter"], Math.Min(1000000, Math.Max(0, (int?)d["Offset"] ?? 0)));
                 case "Recovery": return _cache.List();
                 case "Settings": return _store.Settings();
                 case "SaveSettings":

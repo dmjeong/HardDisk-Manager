@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using ExplorerManager.Contracts;
@@ -18,7 +19,7 @@ namespace ExplorerManager.Client
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
             {
                 timeout.CancelAfter(TimeSpan.FromSeconds(30));
-                using (var pipe = new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous))
+                using (var pipe = new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation))
                 {
                     await pipe.ConnectAsync(3000, timeout.Token).ConfigureAwait(false);
                     byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(request, Protocol.Json));

@@ -71,8 +71,10 @@ namespace ExplorerManager.Application
                             item.CacheId = cached.Id; item.RecoveryState = "CacheReady"; item.State = "DeleteIntent";
                             _journal.RecordItem(item);
                             cancellation.ThrowIfCancellationRequested();
-                            if (_gate.StopReason(policy) != null || PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId)))
+                            var immediatelyBefore = _volumes.Get(policy.VolumeId);
+                            if (_gate.StopReason(policy) != null || !PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime()) || PolicyRules.TargetReached(policy, immediatelyBefore))
                             { _cache.Remove(cached.Id, "Cancelled"); cached = null; Skip(item, run, "조건 변경 또는 목표 달성"); continue; }
+                            item.FreeBefore = immediatelyBefore.FreeBytes;
                             requested = true;
                             file.MarkForDeletion();
                         }
@@ -80,6 +82,7 @@ namespace ExplorerManager.Application
                         _cache.Commit(cached.Id, absent);
                         item.State = absent ? "DeletedConfirmed" : "OutcomeUnknown";
                         item.RecoveryState = absent ? "Recoverable" : "OutcomeUnknown";
+                        if (absent) item.FreeAfter = _volumes.Get(policy.VolumeId).FreeBytes;
                         _journal.RecordItem(item);
                         if (absent)
                         {
