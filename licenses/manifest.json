@@ -133,12 +133,6 @@
     "project": null
   },
   {
-    "package": "System.Buffers/4.4.0",
-    "license": null,
-    "repository": {},
-    "project": "https://dot.net/"
-  },
-  {
     "package": "System.Buffers/4.6.1",
     "license": "MIT",
     "repository": {
@@ -169,12 +163,6 @@
     "project": "https://dot.net/"
   },
   {
-    "package": "System.Memory/4.5.3",
-    "license": null,
-    "repository": {},
-    "project": "https://dot.net/"
-  },
-  {
     "package": "System.Memory/4.6.3",
     "license": "MIT",
     "repository": {
@@ -185,12 +173,6 @@
     "project": "https://github.com/dotnet/maintenance-packages"
   },
   {
-    "package": "System.Numerics.Vectors/4.4.0",
-    "license": null,
-    "repository": {},
-    "project": "https://dot.net/"
-  },
-  {
     "package": "System.Numerics.Vectors/4.6.1",
     "license": "MIT",
     "repository": {
@@ -199,12 +181,6 @@
       "commit": "6b84308c9ad012f53240d72c1d716d7e42546483"
     },
     "project": "https://github.com/dotnet/maintenance-packages"
-  },
-  {
-    "package": "System.Runtime.CompilerServices.Unsafe/4.5.2",
-    "license": null,
-    "repository": {},
-    "project": "https://dot.net/"
   },
   {
     "package": "System.Runtime.CompilerServices.Unsafe/6.1.2",

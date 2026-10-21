@@ -26,6 +26,7 @@
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Security" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ExplorerManager.Application\ExplorerManager.Application.csproj"><Project>{F6924EE7-A97D-472B-95FF-CBD3E36CE78C}</Project><Name>ExplorerManager.Application</Name></ProjectReference>
