@@ -29,6 +29,8 @@ namespace ExplorerManager.Infrastructure
         private Task _operation = Task.CompletedTask;
         private Task[] _background = Array.Empty<Task>();
         private readonly Dictionary<string, DateTime> _lastRun = new Dictionary<string, DateTime>();
+        private readonly Dictionary<string, DateTime> _lastCheck = new Dictionary<string, DateTime>();
+        private string _activePolicyId;
         private readonly Dictionary<string, UnlockTicket> _tickets = new Dictionary<string, UnlockTicket>();
         private readonly HashSet<string> _executingTickets = new HashSet<string>();
         private bool _busy, _paused;
@@ -89,15 +91,15 @@ namespace ExplorerManager.Infrastructure
                 {
                     foreach (var p in _store.Policies().Where(x => x.Enabled))
                     {
-                        DateTime last;
-                        lock (_sync) { if (_busy || _paused) break; _lastRun.TryGetValue(p.Id, out last); }
-                        if ((DateTime.UtcNow - last).TotalSeconds < Math.Max(p.IntervalSeconds, p.CooldownSeconds) || !PolicyRules.InWindow(p, DateTime.Now)) continue;
+                        DateTime last, checkedAt;
+                        lock (_sync) { if (_busy || _paused) break; _lastRun.TryGetValue(p.Id, out last); _lastCheck.TryGetValue(p.Id, out checkedAt); }
+                        if ((DateTime.UtcNow - checkedAt).TotalSeconds < p.IntervalSeconds || (DateTime.UtcNow - last).TotalSeconds < p.CooldownSeconds || !PolicyRules.InWindow(p, DateTime.Now)) continue;
+                        lock (_sync) _lastCheck[p.Id] = DateTime.UtcNow;
                         try
                         {
                             if (StopReason(p) == null && PolicyRules.ShouldStart(p, _volumes.Get(p.VolumeId))) StartCleanup(p.Id, false, "Scheduler");
-                            else lock (_sync) _lastRun[p.Id] = DateTime.UtcNow;
                         }
-                        catch (Exception ex) { LogError(ex); lock (_sync) _lastRun[p.Id] = DateTime.UtcNow; }
+                        catch (Exception ex) { LogError(ex); }
                     }
                     if (++tick % 360 == 0) _store.Maintain(_store.Settings());
                 }
@@ -118,6 +120,7 @@ namespace ExplorerManager.Infrastructure
                 if (_busy) throw new InvalidOperationException("현재 작업이 진행 중입니다. 완료 또는 취소 후 다시 시도하세요.");
                 if (_paused && !allowPaused) throw new InvalidOperationException("전체 정리가 일시정지되어 있습니다.");
                 _busy = true; _active = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+                _activePolicyId = policyId;
                 string operationId = Guid.NewGuid().ToString("N");
                 _operation = Task.Run(async () =>
                 {
@@ -128,7 +131,7 @@ namespace ExplorerManager.Infrastructure
                         _health = "AuditUnavailable: " + ex.Message; LogError(ex);
                         try { _store.SaveAlert(new AlertRecord { Utc = DateTime.UtcNow, Category = "OperationError", Severity = "Critical", Message = ex.Message, PolicyId = policyId }); } catch { }
                     }
-                    finally { lock (_sync) { _lastRun[policyId ?? "restore"] = DateTime.UtcNow; _busy = false; _active.Dispose(); _active = null; } }
+                    finally { lock (_sync) { _lastRun[policyId ?? "restore"] = DateTime.UtcNow; _busy = false; _active.Dispose(); _active = null; _activePolicyId = null; } }
                 });
                 return operationId;
             }
@@ -169,7 +172,7 @@ namespace ExplorerManager.Infrastructure
                     foreach (var other in _store.Policies().Where(x => x.Id != p.Id))
                         if (other.Roots.Any(a => p.Roots.Any(b => PathGuard.Within(a, b) || PathGuard.Within(b, a)))) throw new ArgumentException("다른 정책과 관리 경로가 중복됩니다.");
                     _store.RecordEvent("PolicyChanged", caller.Sid, p.Id, JsonConvert.SerializeObject(p, Protocol.Json));
-                    lock (_sync) _active?.Cancel();
+                    lock (_sync) { if (_activePolicyId == p.Id) _active?.Cancel(); }
                     return _store.SavePolicy(p);
                 case "DeletePolicy":
                     string id = Required(d, "Id"); lock (_sync) { if (_busy) throw new InvalidOperationException("작업 종료 후 정책을 삭제하세요."); }

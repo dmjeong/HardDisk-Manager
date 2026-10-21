@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -29,6 +30,7 @@ namespace ExplorerManager.Application
                 StartedUtc = _clock.UtcNow, CutoffUtc = _clock.UtcNow.AddDays(-policy.RetentionDays), Actor = actor, DryRun = preview,
                 FreeBefore = before.FreeBytes, FreeAfter = before.FreeBytes };
             _journal.SaveRun(run);
+            var elapsed = Stopwatch.StartNew();
             try
             {
                 if (!preview && !PolicyRules.ShouldStart(policy, before)) { run.State = "BelowThreshold"; return run; }
@@ -37,12 +39,15 @@ namespace ExplorerManager.Application
                 _journal.SetCandidateTotals(run);
                 run.State = preview ? "Preview" : "Deleting"; _journal.SaveRun(run);
                 var deleteStarted = _clock.UtcNow;
+                var deleteElapsed = Stopwatch.StartNew();
                 int attempted = 0;
                 long requestedDeleteBytes = 0;
                 while (true)
                 {
                     cancellation.ThrowIfCancellationRequested();
-                    if ((_clock.UtcNow - deleteStarted).TotalSeconds >= policy.MaxRunSeconds || attempted >= policy.MaxItems)
+                    if (Math.Abs((_clock.UtcNow - run.StartedUtc).TotalSeconds - elapsed.Elapsed.TotalSeconds) > 30)
+                    { run.State = "ClockChanged"; break; }
+                    if (deleteElapsed.Elapsed.TotalSeconds >= policy.MaxRunSeconds || attempted >= policy.MaxItems)
                     { run.State = "LimitReached"; break; }
                     if (!preview)
                     {
@@ -73,7 +78,8 @@ namespace ExplorerManager.Application
                             _journal.RecordItem(item);
                             cancellation.ThrowIfCancellationRequested();
                             var immediatelyBefore = _volumes.Get(policy.VolumeId);
-                            if (_gate.StopReason(policy) != null || !PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime()) || PolicyRules.TargetReached(policy, immediatelyBefore))
+                            if (Math.Abs((_clock.UtcNow - run.StartedUtc).TotalSeconds - elapsed.Elapsed.TotalSeconds) > 30 ||
+                                _gate.StopReason(policy) != null || !PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime()) || PolicyRules.TargetReached(policy, immediatelyBefore))
                             { _cache.Remove(cached.Id, "Cancelled"); cached = null; Skip(item, run, "조건 변경 또는 목표 달성"); continue; }
                             item.FreeBefore = immediatelyBefore.FreeBytes;
                             requested = true;

@@ -97,7 +97,15 @@ if (-not $NoAutoStart) {
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
     Register-ScheduledTask -TaskName 'ExplorerManager.Desktop' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
-Start-Service ExplorerManager
+try { Start-Service ExplorerManager } catch {
+    Get-CimInstance Win32_Service -Filter "Name='ExplorerManager'" | Select-Object Name,State,StartName,PathName,ExitCode,ServiceSpecificExitCode | Format-List | Out-Host
+    foreach ($log in @('Application','System')) {
+        Get-WinEvent -FilterHashtable @{LogName=$log;StartTime=(Get-Date).AddMinutes(-3)} -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'Explorer.?Manager' } |
+            Select-Object -First 10 TimeCreated,Id,ProviderName,Message | Format-List | Out-Host
+    }
+    throw
+}
 (Get-Service ExplorerManager).WaitForStatus('Running',[TimeSpan]::FromSeconds(30))
 if (-not $NoStartUi) { Start-Process "$InstallDirectory\Desktop\ExplorerManager.Desktop.exe" -Verb RunAs }
 Write-Host 'Installed. Automatic deletion remains disabled until a policy is saved and enabled.'

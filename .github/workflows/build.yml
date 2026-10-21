@@ -41,6 +41,17 @@ jobs:
       - name: Service install, authenticated IPC, WPF render, uninstall
         shell: powershell
         run: ./scripts/Smoke.ps1
+      - name: Save service diagnostics
+        if: failure()
+        shell: powershell
+        run: |
+          New-Item artifacts -ItemType Directory -Force | Out-Null
+          foreach ($log in @('Application','System')) {
+            Get-WinEvent -FilterHashtable @{LogName=$log;StartTime=(Get-Date).AddMinutes(-10)} -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'Explorer.?Manager' } |
+              Select-Object TimeCreated,Id,ProviderName,Message | Format-List | Out-File "artifacts/$log-events.log"
+          }
+          Copy-Item "$env:ProgramData/ExplorerManager/Data/*.log" artifacts -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
