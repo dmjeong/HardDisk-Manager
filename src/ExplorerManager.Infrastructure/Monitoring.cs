@@ -124,11 +124,19 @@ namespace ExplorerManager.Infrastructure
             {
                 try
                 {
+                    try
+                    {
+                        var privileged = await PrivilegedSensors.ReadAsync(ct).ConfigureAwait(false);
+                        lock (_sync) { _sensorMetrics = privileged; _sensorUtc = DateTime.UtcNow; }
+                        await Task.Delay(5000, ct).ConfigureAwait(false); continue;
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is TimeoutException || ex is OperationCanceledException || ex is UnauthorizedAccessException) { if (ct.IsCancellationRequested) return; }
                     string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ExplorerManager.SensorHost.exe");
                     if (!File.Exists(path)) throw new FileNotFoundException("센서 호스트가 없습니다.", path);
                     _sensor = Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true });
                     _sensor.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) _error(new IOException(e.Data)); };
                     _sensor.BeginErrorReadLine();
+                    int frames = 0;
                     using (ct.Register(StopSensor))
                         while (!ct.IsCancellationRequested && !_sensor.HasExited)
                         {
@@ -138,6 +146,7 @@ namespace ExplorerManager.Infrastructure
                             if (json.Length > 1024 * 1024) throw new IOException("센서 응답 크기 제한");
                             var data = JsonConvert.DeserializeObject<List<Metric>>(json, Protocol.Json);
                             if (data != null) lock (_sync) { _sensorMetrics = data; _sensorUtc = DateTime.UtcNow; }
+                            if (++frames >= 3) break;
                         }
                 }
                 catch (Exception ex) { if (!ct.IsCancellationRequested) _error(ex); }

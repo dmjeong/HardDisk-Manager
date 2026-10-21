@@ -1,0 +1,7 @@
+<Project>
+  <!-- net48 does not reliably flatten RID native assets; the loader needs the x64 DLL at the executable base. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48' And Exists('$(NuGetPackageRoot)sqlitepclraw.lib.e_sqlite3/2.1.13/runtimes/win-x64/native/e_sqlite3.dll')">
+    <Content Include="$(NuGetPackageRoot)sqlitepclraw.lib.e_sqlite3/2.1.13/runtimes/win-x64/native/e_sqlite3.dll"
+             Link="e_sqlite3.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

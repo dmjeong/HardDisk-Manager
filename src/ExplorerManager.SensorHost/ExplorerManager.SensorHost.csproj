@@ -4,5 +4,6 @@
     <ProjectReference Include="../ExplorerManager.Contracts/ExplorerManager.Contracts.csproj" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <Reference Include="System.Management" />
+    <Reference Include="System.ServiceProcess" />
   </ItemGroup>
 </Project>

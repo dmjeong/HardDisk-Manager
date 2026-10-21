@@ -1,6 +1,6 @@
 #Requires -RunAsAdministrator
 [CmdletBinding()]
-param([string]$InstallDirectory="$env:ProgramFiles\ExplorerManager", [switch]$NoStartUi, [switch]$NoAutoStart)
+param([string]$InstallDirectory="$env:ProgramFiles\ExplorerManager", [switch]$NoStartUi, [switch]$NoAutoStart, [switch]$NoHardwareSensors)
 $ErrorActionPreference='Stop'
 $source = Join-Path $PSScriptRoot 'app'
 if (-not (Test-Path "$source/Service/ExplorerManager.Service.exe")) { throw 'Extract the complete build package, then run Install.ps1 next to app/.' }
@@ -11,6 +11,7 @@ if (Get-Service ExplorerManager -ErrorAction SilentlyContinue) {
     Stop-Service ExplorerManager -ErrorAction Stop
     (Get-Service ExplorerManager).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30))
 }
+if (Get-Service ExplorerManagerSensors -ErrorAction SilentlyContinue) { Stop-Service ExplorerManagerSensors }
 New-Item $InstallDirectory -ItemType Directory -Force | Out-Null
 & icacls.exe $InstallDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Executable ACL configuration failed.' }
@@ -33,6 +34,18 @@ if ($LASTEXITCODE -ne 0) { throw 'Data ACL configuration failed.' }
 if (-not [Diagnostics.EventLog]::SourceExists('ExplorerManager')) { New-EventLog -LogName Application -Source ExplorerManager }
 & sc.exe failure ExplorerManager 'reset= 86400' 'actions= restart/10000/restart/30000/restart/60000' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Service recovery configuration failed.' }
+if (-not $NoHardwareSensors) {
+    $sensorExe=Join-Path $InstallDirectory 'Service\ExplorerManager.SensorHost.exe'
+    if (-not (Get-Service ExplorerManagerSensors -ErrorAction SilentlyContinue)) {
+        & sc.exe create ExplorerManagerSensors "binPath= ""$sensorExe"" --service" 'start= auto' 'obj= LocalSystem' 'DisplayName= Explorer Manager Hardware Sensors'
+    } else {
+        & sc.exe config ExplorerManagerSensors "binPath= ""$sensorExe"" --service" 'start= auto' 'obj= LocalSystem'
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'Read-only hardware sensor service configuration failed.' }
+    & sc.exe failure ExplorerManagerSensors 'reset= 86400' 'actions= restart/10000/restart/30000/restart/60000' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Sensor recovery configuration failed.' }
+    Start-Service ExplorerManagerSensors
+}
 if (-not $NoAutoStart) {
     $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $action = New-ScheduledTaskAction -Execute "$InstallDirectory\Desktop\ExplorerManager.Desktop.exe" -Argument '--tray'

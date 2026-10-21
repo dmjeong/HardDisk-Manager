@@ -4,6 +4,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../src/ExplorerManager.Infrastructure/ExplorerManager.Infrastructure.csproj" />
     <ProjectReference Include="../../src/ExplorerManager.Presentation/ExplorerManager.Presentation.csproj" />
     <ProjectReference Include="../../src/ExplorerManager.Client/ExplorerManager.Client.csproj" />

@@ -97,7 +97,16 @@ namespace ExplorerManager.Infrastructure
                             throw new IOException("지원하지 않는 프로토콜 또는 요청입니다.");
                         var caller = Authenticate(pipe);
                         Response response;
-                        try { response = _execute(request, caller); }
+                        try
+                        {
+                            response = null;
+#if NETFRAMEWORK
+                            if (request.Command == "PrepareUnlock" || request.Command == "ValidateUnlock")
+                                pipe.RunAsClient(() => response = _execute(request, caller));
+                            else
+#endif
+                                response = _execute(request, caller);
+                        }
                         catch (Exception ex) { response = new Response { Id = request.Id, Error = ex.Message }; _error(ex); }
                         byte[] encoded = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response, Protocol.Json));
                         if (encoded.Length > Protocol.MaxFrameBytes) throw new IOException("응답 크기 제한을 초과했습니다. 조회 범위를 줄이세요.");

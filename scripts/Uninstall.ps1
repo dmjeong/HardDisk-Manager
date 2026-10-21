@@ -8,6 +8,12 @@ if (-not (Test-Path $marker)) { throw 'Installation marker not found. Refusing t
 $record=Get-Content $marker -Raw | ConvertFrom-Json
 if ($record.Path -ne $InstallDirectory -or $InstallDirectory.Length -lt 10) { throw 'Installation marker does not match.' }
 Write-Warning 'Stopping the service clears all RAM recovery copies.'
+if (Get-Service ExplorerManagerSensors -ErrorAction SilentlyContinue) {
+    Stop-Service ExplorerManagerSensors
+    (Get-Service ExplorerManagerSensors).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30))
+    & sc.exe delete ExplorerManagerSensors | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Sensor service removal failed.' }
+}
 if (Get-Service ExplorerManager -ErrorAction SilentlyContinue) {
     Stop-Service ExplorerManager
     (Get-Service ExplorerManager).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30))

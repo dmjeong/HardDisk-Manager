@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Management;
 using System.Threading;
+using System.ServiceProcess;
 using ExplorerManager.Domain;
 using LibreHardwareMonitor.Hardware;
 using Newtonsoft.Json;
@@ -12,8 +13,9 @@ namespace ExplorerManager.SensorHost
 {
     internal static class Program
     {
-        private static int Main()
+        private static int Main(string[] args)
         {
+            if (args.Contains("--service")) { ServiceBase.Run(new HardwareSensorService()); return 0; }
             var computer = new Computer { IsCpuEnabled = true, IsStorageEnabled = true };
             try
             {
@@ -47,7 +49,7 @@ namespace ExplorerManager.SensorHost
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
             finally { computer.Close(); }
         }
-        private static void Read(IHardware hardware, List<Metric> metrics)
+        internal static void Read(IHardware hardware, List<Metric> metrics)
         {
             hardware.Update();
             foreach (var sensor in hardware.Sensors.Where(s => s.SensorType == SensorType.Temperature && s.Value.HasValue))
