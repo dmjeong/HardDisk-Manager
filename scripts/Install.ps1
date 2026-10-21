@@ -29,7 +29,7 @@ namespace ExplorerManagerInstaller {
      created=true;
     }
     try {
-     if(!ChangeServiceConfigW(service,uint.MaxValue,2,uint.MaxValue,binary,null,IntPtr.Zero,null,account=="LocalSystem"?null:account,"",display))
+     if(!ChangeServiceConfigW(service,uint.MaxValue,2,uint.MaxValue,binary,null,IntPtr.Zero,null,account=="LocalSystem"?null:account,account.StartsWith("NT SERVICE\\",StringComparison.OrdinalIgnoreCase)?null:"",display))
       throw new Win32Exception(Marshal.GetLastWin32Error());
     } catch { if(created) DeleteService(service); throw; }
     finally { CloseServiceHandle(service); }
@@ -82,6 +82,9 @@ if (-not $NoHardwareSensors) {
     & sc.exe failure ExplorerManagerSensors reset= 86400 actions= restart/10000/restart/30000/restart/60000 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Sensor recovery configuration failed.' }
     Start-Service ExplorerManagerSensors
+} elseif (Get-Service ExplorerManagerSensors -ErrorAction SilentlyContinue) {
+    & sc.exe config ExplorerManagerSensors start= disabled | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable hardware sensors.' }
 }
 if (-not $NoAutoStart) {
     $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name

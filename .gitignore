@@ -7,6 +7,7 @@
 *.db
 *.db-shm
 *.db-wal
+*.db.scan*
 *.log
 TestResults/
 artifacts/

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Management;
 using System.Threading;
 using System.ServiceProcess;
+using System.Text;
 using ExplorerManager.Domain;
 using LibreHardwareMonitor.Hardware;
 using Newtonsoft.Json;
@@ -16,6 +17,7 @@ namespace ExplorerManager.SensorHost
         private static int Main(string[] args)
         {
             if (args.Contains("--service")) { ServiceBase.Run(new HardwareSensorService()); return 0; }
+            Console.OutputEncoding = new UTF8Encoding(false);
             var computer = new Computer { IsCpuEnabled = true, IsStorageEnabled = true };
             try
             {

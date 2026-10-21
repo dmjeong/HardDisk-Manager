@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -140,7 +141,8 @@ namespace ExplorerManager.Infrastructure
                     catch (Exception ex) when (ex is IOException || ex is TimeoutException || ex is OperationCanceledException || ex is UnauthorizedAccessException) { if (ct.IsCancellationRequested) return; }
                     string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ExplorerManager.SensorHost.exe");
                     if (!File.Exists(path)) throw new FileNotFoundException("센서 호스트가 없습니다.", path);
-                    _sensor = Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true });
+                    _sensor = Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+                        StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, CreateNoWindow = true });
                     _sensor.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) _error(new IOException(e.Data)); };
                     _sensor.BeginErrorReadLine();
                     int frames = 0;
