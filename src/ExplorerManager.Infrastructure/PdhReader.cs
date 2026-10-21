@@ -12,6 +12,7 @@ namespace ExplorerManager.Infrastructure
         [DllImport("pdh.dll", CharSet = CharSet.Unicode)] private static extern uint PdhOpenQueryW(string source, IntPtr user, out IntPtr query);
         [DllImport("pdh.dll", CharSet = CharSet.Unicode)] private static extern uint PdhAddEnglishCounterW(IntPtr query, string path, IntPtr user, out IntPtr counter);
         [DllImport("pdh.dll")] private static extern uint PdhCollectQueryData(IntPtr query);
+        [DllImport("pdh.dll")] private static extern uint PdhGetFormattedCounterValue(IntPtr counter, uint format, out uint type, out Value value);
         [DllImport("pdh.dll", CharSet = CharSet.Unicode)] private static extern uint PdhGetFormattedCounterArrayW(IntPtr counter, uint format, ref uint bytes, out uint count, IntPtr items);
         [DllImport("pdh.dll")] private static extern uint PdhCloseQuery(IntPtr query);
         private IntPtr _query;
@@ -42,6 +43,15 @@ namespace ExplorerManager.Infrastructure
             if (PdhCollectQueryData(_query) != 0) { _warmed = false; return result; }
             foreach (var counter in _counters)
             {
+                if (counter.Key == "CPU")
+                {
+                    Value value; uint type;
+                    uint code = PdhGetFormattedCounterValue(counter.Value.Item1, 0x200, out type, out value);
+                    bool valid = _warmed && code == 0 && (value.Status == 0 || value.Status == 1) && !double.IsNaN(value.Number) && !double.IsInfinity(value.Number);
+                    result.Add(new Metric { Entity = "CPU", Name = "CPU", Unit = "%", Value = valid ? (double?)value.Number : null,
+                        Quality = valid ? "Valid" : "WarmingUp", Provider = "PDH" });
+                    continue;
+                }
                 uint bytes = 0, count;
                 PdhGetFormattedCounterArrayW(counter.Value.Item1, 0x200, ref bytes, out count, IntPtr.Zero);
                 if (bytes == 0 || bytes > 4 * 1024 * 1024) continue;

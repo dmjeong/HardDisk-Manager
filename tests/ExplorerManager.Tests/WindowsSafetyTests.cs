@@ -37,6 +37,15 @@ namespace ExplorerManager.Tests
                 }
             }
         }
+        [WindowsFact] public async Task PdhReportsValidCpuAfterTwoSamples()
+        {
+            using (var counters = new PdhReader())
+            {
+                counters.Read(); await Task.Delay(1500);
+                var cpu = counters.Read().Single(m => m.Name == "CPU");
+                Assert.Equal("Valid", cpu.Quality); Assert.True(cpu.Value.HasValue); Assert.InRange(cpu.Value.Value, 0, 100);
+            }
+        }
         [WindowsFact] public async Task AlternateDataStreamsAndHardlinksAreNeverDeleted()
         {
             using (var f = new NativeFixture())

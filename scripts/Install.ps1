@@ -69,6 +69,10 @@ $eventGroup=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-573')
 if (-not (Get-LocalGroupMember -SID $eventGroup | Where-Object { $_.Name -eq 'NT SERVICE\ExplorerManager' })) {
     Add-LocalGroupMember -SID $eventGroup -Member 'NT SERVICE\ExplorerManager'
 }
+$performanceGroup=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-558')
+if (-not (Get-LocalGroupMember -SID $performanceGroup | Where-Object { $_.Name -eq 'NT SERVICE\ExplorerManager' })) {
+    Add-LocalGroupMember -SID $performanceGroup -Member 'NT SERVICE\ExplorerManager'
+}
 $data = Join-Path $env:ProgramData 'ExplorerManager'
 New-Item $data -ItemType Directory -Force | Out-Null
 & icacls.exe $data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' 'NT SERVICE\ExplorerManager:(OI)(CI)M' | Out-Null
