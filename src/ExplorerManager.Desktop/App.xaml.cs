@@ -38,6 +38,9 @@ namespace ExplorerManager.Desktop
             bool smoke = e.Args.Contains("--smoke");
             if (smoke)
             {
+                int screenshotAt = Array.IndexOf(e.Args, "--screenshot");
+                string outputDirectory = screenshotAt >= 0 && screenshotAt + 1 < e.Args.Length
+                    ? Path.GetDirectoryName(Path.GetFullPath(e.Args[screenshotAt + 1])) : Environment.CurrentDirectory;
                 var bindingOutput = new StringWriter();
                 var listener = new TextWriterTraceListener(bindingOutput);
                 PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
@@ -60,10 +63,10 @@ namespace ExplorerManager.Desktop
                             using (var file = File.Create(e.Args[at + 1])) encoder.Save(file);
                         }
                         listener.Flush(); string errors = bindingOutput.ToString();
-                        if (!string.IsNullOrWhiteSpace(errors)) { File.WriteAllText("wpf-binding-errors.log", errors); _exit = true; Shutdown(2); return; }
+                        if (!string.IsNullOrWhiteSpace(errors)) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-binding-errors.log"), errors); _exit = true; Shutdown(2); return; }
                         _exit = true; Shutdown(0);
                     }
-                    catch (Exception ex) { File.WriteAllText("wpf-smoke-error.log", ex.ToString()); _exit = true; Shutdown(3); }
+                    catch (Exception ex) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-smoke-error.log"), ex.ToString()); _exit = true; Shutdown(3); }
                 };
                 finish.Start();
             }

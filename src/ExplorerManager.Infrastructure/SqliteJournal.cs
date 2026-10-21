@@ -25,6 +25,8 @@ namespace ExplorerManager.Infrastructure
                 version.CommandText = "PRAGMA user_version";
                 if (Convert.ToInt32(version.ExecuteScalar()) > 1) { _db.Dispose(); throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요."); }
             }
+            // Candidates are disposable; a crash during a scan must not prevent audit recovery.
+            if (File.Exists(path + ".scan")) File.Delete(path + ".scan");
             _scan = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path + ".scan", Pooling = false }.ToString());
             _scan.Open();
             using (var setup = _scan.CreateCommand())

@@ -17,7 +17,7 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 
 1. [Actions](https://github.com/dmjeong/HardDisk-Manager/actions)에서 성공한 실행의 `ExplorerManager-win-x64` artifact를 받습니다.
 2. 그 안의 `ExplorerManager-win-x64.zip`을 완전히 압축 해제합니다.
-3. 관리자 PowerShell에서 `./Install.ps1`을 실행합니다.
+3. 관리자 Windows PowerShell 5.1에서 `./Install.ps1`을 실행합니다.
 4. 관리할 폴더에 서비스 권한을 부여합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
 5. WPF 앱을 관리자 권한으로 실행하고 **정책 저장 → 미리보기 → 결과 확인 → 자동 삭제 활성화** 순서로 설정합니다.
 

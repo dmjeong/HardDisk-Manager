@@ -38,7 +38,6 @@ namespace ExplorerManager.Application
                 await _files.ScanAsync(policy, run.CutoffUtc, run.Id, _journal, cancellation).ConfigureAwait(false);
                 _journal.SetCandidateTotals(run);
                 run.State = preview ? "Preview" : "Deleting"; _journal.SaveRun(run);
-                var deleteStarted = _clock.UtcNow;
                 var deleteElapsed = Stopwatch.StartNew();
                 int attempted = 0;
                 long requestedDeleteBytes = 0;

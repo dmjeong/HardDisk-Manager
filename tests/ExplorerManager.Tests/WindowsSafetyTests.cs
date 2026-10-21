@@ -92,6 +92,7 @@ namespace ExplorerManager.Tests
             using (var f = new NativeFixture())
             using (var runtime = new ServiceRuntime(Path.Combine(f.Base, "runtime")))
             {
+                Assert.Throws<InvalidOperationException>(() => new ServiceRuntime(Path.Combine(f.Base, "duplicate")));
                 Assert.Throws<UnauthorizedAccessException>(() => runtime.Execute(new Request { Command = "Dashboard" }, new Caller { Sid = "fake", Operator = false }));
                 var request = new Request { Command = "SavePolicy", Data = JObject.FromObject(f.Policy) };
                 var caller = new Caller { Sid = "test-operator", Operator = true };

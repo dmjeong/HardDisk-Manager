@@ -36,14 +36,22 @@ namespace ExplorerManager.Infrastructure
         private bool _busy, _paused;
         private string _health = "Ready";
         private readonly string _dataDirectory;
+        private readonly Mutex _instance;
         public ServiceRuntime(string dataDirectory)
         {
-            _dataDirectory = Path.GetFullPath(dataDirectory); Directory.CreateDirectory(_dataDirectory);
-            _store = new SqliteJournal(Path.Combine(_dataDirectory, "manager.db")); _store.Reconcile();
-            _cache = new RecoveryCache(_store.Settings().CacheBytes, _store.SetRecoveryState);
-            _files = new WindowsFileSystem(_volumes);
-            _monitor = new Monitoring(_store, LogError);
-            _engine = new CleanupEngine(_volumes, _files, _store, _cache, new SystemClock(), this, _locks);
+            bool created;
+            _instance = new Mutex(false, @"Global\ExplorerManager.ServiceHost.v1", out created);
+            if (!created) { _instance.Dispose(); throw new InvalidOperationException("Explorer Manager 서비스 호스트가 이미 실행 중입니다."); }
+            try
+            {
+                _dataDirectory = Path.GetFullPath(dataDirectory); Directory.CreateDirectory(_dataDirectory);
+                _store = new SqliteJournal(Path.Combine(_dataDirectory, "manager.db")); _store.Reconcile();
+                _cache = new RecoveryCache(_store.Settings().CacheBytes, _store.SetRecoveryState);
+                _files = new WindowsFileSystem(_volumes);
+                _monitor = new Monitoring(_store, LogError);
+                _engine = new CleanupEngine(_volumes, _files, _store, _cache, new SystemClock(), this, _locks);
+            }
+            catch { _instance.Dispose(); throw; }
         }
         public void Start()
         {
@@ -303,6 +311,10 @@ namespace ExplorerManager.Infrastructure
             _stop.Cancel(); lock (_sync) _active?.Cancel(); _monitor.Dispose();
             try { await Task.WhenAll(_background.Concat(new[] { _operation })).ConfigureAwait(false); } catch (OperationCanceledException) { }
         }
-        public void Dispose() { _monitor.Dispose(); _cache.Dispose(); _store.Dispose(); _stop.Dispose(); }
+        public void Dispose()
+        {
+            try { _monitor.Dispose(); _cache.Dispose(); _store.Dispose(); _stop.Dispose(); }
+            finally { _instance.Dispose(); }
+        }
     }
 }
