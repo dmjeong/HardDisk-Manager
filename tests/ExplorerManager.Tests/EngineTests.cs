@@ -1,0 +1,148 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ExplorerManager.Application;
+using ExplorerManager.Domain;
+using ExplorerManager.Infrastructure;
+using Xunit;
+
+namespace ExplorerManager.Tests
+{
+    public sealed class Fixture : IDisposable, IVolumeCatalog, IClock, IExecutionGate, ILockInspector, IFileSystem
+    {
+        public readonly string DirectoryPath = Path.Combine(Path.GetTempPath(), "explorer-tests-" + Guid.NewGuid().ToString("N"));
+        public readonly SqliteJournal Store;
+        public readonly RecoveryCache Cache;
+        public readonly List<FileSnapshot> Files = new List<FileSnapshot>();
+        public readonly List<string> Deleted = new List<string>();
+        public readonly HashSet<string> Locked = new HashSet<string>();
+        public readonly DrivePolicy Policy = new DrivePolicy { VolumeId = "volume", StartThreshold = 90, StopThreshold = 80, Roots = new List<string> { "D:\\a", "D:\\b" } };
+        public long Free = 100;
+        public bool ScanTimeout;
+        public string Gate;
+        public Fixture() { Directory.CreateDirectory(DirectoryPath); Store = new SqliteJournal(Path.Combine(DirectoryPath, "test.db")); Cache = new RecoveryCache(1024 * 1024, Store.SetRecoveryState); }
+        public CleanupEngine Engine(IJournal journal = null, IRecoveryCache cache = null) => new CleanupEngine(this, this, journal ?? Store, cache ?? Cache, this, this, this);
+        public FileSnapshot Add(string path, int days, int length = 60)
+        {
+            var f = new FileSnapshot { Path = path, Root = "D:\\a", VolumeId = "volume", FileId = Guid.NewGuid().ToString(), Length = length,
+                LastWriteUtc = UtcNow.AddDays(-days), CreationUtc = UtcNow.AddDays(-days), AgeUtc = UtcNow.AddDays(-days) };
+            Files.Add(f); return f;
+        }
+        public IList<VolumeStatus> List() => new[] { Get("volume") };
+        public VolumeStatus Get(string id) => new VolumeStatus { Id = "volume", TotalBytes = 1000, FreeBytes = Free };
+        public DateTime UtcNow { get; } = new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc);
+        public string StopReason(DrivePolicy p) => Gate;
+        public IList<ProcessIdentity> Inspect(string p) => new List<ProcessIdentity>();
+        public Task ScanAsync(DrivePolicy p, DateTime cutoff, string id, IJournal j, CancellationToken ct)
+        { foreach (var f in Files) j.AddCandidate(id, f); if (ScanTimeout) throw new TimeoutException(); return Task.CompletedTask; }
+        public IFileLease OpenVerified(FileSnapshot f, DrivePolicy p)
+        { if (Locked.Contains(f.Path)) throw new Win32Exception(32); return new Lease(this, f); }
+        public bool IsAbsent(FileSnapshot f) => Deleted.Contains(f.Path);
+        public FileSnapshot FindEmptyParent(FileSnapshot d, DrivePolicy p, DateTime c) => null;
+        public Task<FileSnapshot> RestoreAsync(FileSnapshot original, Stream input, string hash, string target, CancellationToken c) => Task.FromResult(original);
+        private sealed class Lease : IFileLease
+        {
+            private readonly Fixture _f;
+            public Lease(Fixture f, FileSnapshot snapshot) { _f = f; Snapshot = snapshot; Content = new MemoryStream(new byte[snapshot.Length]); }
+            public FileSnapshot Snapshot { get; }
+            public Stream Content { get; }
+            public void MarkForDeletion() { _f.Deleted.Add(Snapshot.Path); _f.Free += Snapshot.Length; }
+            public void Dispose() => Content.Dispose();
+        }
+        public void Dispose() { Cache.Dispose(); Store.Dispose(); Directory.Delete(DirectoryPath, true); }
+    }
+    public sealed class EngineTests
+    {
+        [Fact] public async Task GlobalOldestOrderAndStopAfterEachFile()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\b\\new", 31); f.Add("D:\\a\\old", 60); f.Add("D:\\b\\middle", 40);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(new[] { "D:\\a\\old", "D:\\b\\middle" }, f.Deleted);
+                Assert.Equal("TargetReached", run.State); Assert.Equal(120, run.DeletedBytes); Assert.Equal(120, run.ObservedFreeDelta);
+            }
+        }
+        [Fact] public async Task PreviewNeverDeletesOrAllocatesRecoveryAndKeepsHistory()
+        {
+            using (var f = new Fixture())
+            {
+                f.Free = 900; f.Add("D:\\a\\file", 60);
+                var run = await f.Engine().RunAsync(f.Policy, true, "test", CancellationToken.None);
+                Assert.Empty(f.Deleted); Assert.Equal(0, f.Cache.Used); Assert.Equal("PreviewComplete", run.State);
+                Assert.Equal("WouldDelete", f.Store.History(null, 0).Items.Single().State);
+            }
+        }
+        [Fact] public async Task LockedOldestFileDoesNotBlockOtherCandidates()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\locked", 60); f.Add("D:\\b\\free", 40, 120); f.Locked.Add("D:\\a\\locked");
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Single(f.Deleted); Assert.Equal(1, run.Skipped); Assert.Single(f.Store.Alerts());
+                Assert.Equal("LockedFile", f.Store.Alerts()[0].Category);
+            }
+        }
+        [Fact] public async Task RecentAndProtectedFilesAreKeptEvenWhenFull()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\recent", 1);
+                var protectedFile = f.Add("D:\\a\\restored", 60); f.Store.Protect(protectedFile, f.UtcNow.AddDays(1));
+                await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None); Assert.Empty(f.Deleted);
+            }
+        }
+        [Fact] public async Task IncompleteSnapshotDoesNotDelete()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\old", 60); f.ScanTimeout = true;
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal("ScanIncomplete", run.State); Assert.Empty(f.Deleted);
+            }
+        }
+        [Fact] public async Task OversizeFilesAreSkippedWithoutPermanentDeletion()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\huge", 60, 2000000);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(1, run.Skipped); Assert.Empty(f.Deleted);
+            }
+        }
+        [Fact] public void JournalReconciliationNeverClaimsInterruptedIntentSucceeded()
+        {
+            using (var f = new Fixture())
+            {
+                var item = new ItemRecord { RunId = "run", File = f.Add("D:\\a\\file", 60), Utc = f.UtcNow, State = "DeleteIntent", RecoveryState = "CacheReady" };
+                f.Store.RecordItem(item); f.Store.Reconcile();
+                var recovered = f.Store.History(null, 0).Items.Single();
+                Assert.Equal("OutcomeUnknown", recovered.State); Assert.Equal("UnavailableAfterRestart", recovered.RecoveryState);
+            }
+        }
+        [Fact] public void HistorySearchTreatsPercentAndUnderscoreLiterally()
+        {
+            using (var f = new Fixture())
+            {
+                f.Store.RecordItem(new ItemRecord { RunId = "r", Utc = f.UtcNow, File = f.Add("D:\\a\\100%_data", 60), State = "Skipped" });
+                f.Store.RecordItem(new ItemRecord { RunId = "r", Utc = f.UtcNow, File = f.Add("D:\\a\\100AAdata", 60), State = "Skipped" });
+                Assert.Single(f.Store.History("%_", 0).Items);
+            }
+        }
+        [Fact] public void RequestsAreDurablyDeduplicatedAndMismatchedPayloadIsRejected()
+        {
+            using (var f = new Fixture())
+            {
+                f.Store.BeginRequest("sid", "id", "hash");
+                Assert.Throws<InvalidOperationException>(() => f.Store.RequestReceipt("sid", "id", "hash"));
+                f.Store.EndRequest("sid", "id", new ExplorerManager.Contracts.Response { Id = "id", Success = true });
+                Assert.True(f.Store.RequestReceipt("sid", "id", "hash").Success);
+                Assert.Throws<InvalidOperationException>(() => f.Store.RequestReceipt("sid", "id", "other"));
+            }
+        }
+    }
+}

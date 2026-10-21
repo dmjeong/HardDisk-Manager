@@ -1,0 +1,249 @@
+[
+  {
+    "package": "BlackSharp.Core/1.0.7",
+    "license": "MPL-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/Blacktempel/BlackSharp",
+      "commit": "c70b735c6cec123ee8a046ac4a0bc6c606f52cf0"
+    },
+    "project": "https://github.com/Blacktempel/BlackSharp"
+  },
+  {
+    "package": "DiskInfoToolkit/1.1.2",
+    "license": "MPL-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/Blacktempel/DiskInfoToolkit",
+      "commit": "25319eae5781e75bcf141e844ceab2afe94d40ea"
+    },
+    "project": "https://github.com/Blacktempel/DiskInfoToolkit"
+  },
+  {
+    "package": "HidSharp/2.6.4",
+    "license": "LICENSE.txt",
+    "repository": {},
+    "project": "https://software.seekye.com/hidsharp"
+  },
+  {
+    "package": "LibreHardwareMonitorLib/0.9.6",
+    "license": "MPL-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor",
+      "commit": "3d331e3370efb858411f19511373eff65a218701"
+    },
+    "project": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor"
+  },
+  {
+    "package": "Microsoft.Data.Sqlite.Core/10.0.13",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/dotnet",
+      "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+    },
+    "project": "https://docs.microsoft.com/dotnet/standard/data/sqlite/"
+  },
+  {
+    "package": "Microsoft.Data.Sqlite/10.0.13",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/dotnet",
+      "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+    },
+    "project": "https://docs.microsoft.com/dotnet/standard/data/sqlite/"
+  },
+  {
+    "package": "Microsoft.NETFramework.ReferenceAssemblies.net48/1.0.3",
+    "license": null,
+    "repository": {},
+    "project": "https://github.com/Microsoft/dotnet/tree/master/releases/reference-assemblies"
+  },
+  {
+    "package": "Microsoft.NETFramework.ReferenceAssemblies/1.0.3",
+    "license": null,
+    "repository": {},
+    "project": "https://github.com/Microsoft/dotnet/tree/master/releases/reference-assemblies"
+  },
+  {
+    "package": "Newtonsoft.Json/13.0.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/JamesNK/Newtonsoft.Json",
+      "commit": "4e13299d4b0ec96bd4df9954ef646bd2d1b5bf2a"
+    },
+    "project": "https://www.newtonsoft.com/json"
+  },
+  {
+    "package": "RAMSPDToolkit-NDD/1.4.2",
+    "license": "MPL-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/Blacktempel/RAMSPDToolkit",
+      "commit": "3b47b960e0830fef344624ad5e389675d5f0a1ce"
+    },
+    "project": "https://github.com/Blacktempel/RAMSPDToolkit"
+  },
+  {
+    "package": "SQLitePCLRaw.bundle_e_sqlite3/2.1.13",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ericsink/SQLitePCL.raw"
+    },
+    "project": null
+  },
+  {
+    "package": "SQLitePCLRaw.core/2.1.13",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ericsink/SQLitePCL.raw"
+    },
+    "project": null
+  },
+  {
+    "package": "SQLitePCLRaw.lib.e_sqlite3/2.1.13",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ericsink/SQLitePCL.raw"
+    },
+    "project": null
+  },
+  {
+    "package": "SQLitePCLRaw.provider.dynamic_cdecl/2.1.13",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ericsink/SQLitePCL.raw"
+    },
+    "project": null
+  },
+  {
+    "package": "SQLitePCLRaw.provider.e_sqlite3/2.1.13",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ericsink/SQLitePCL.raw"
+    },
+    "project": null
+  },
+  {
+    "package": "System.Buffers/4.4.0",
+    "license": null,
+    "repository": {},
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Buffers/4.6.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/maintenance-packages",
+      "commit": "6b84308c9ad012f53240d72c1d716d7e42546483"
+    },
+    "project": "https://github.com/dotnet/maintenance-packages"
+  },
+  {
+    "package": "System.CodeDom/10.0.2",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/dotnet",
+      "commit": "44525024595742ebe09023abe709df51de65009b"
+    },
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Management/10.0.2",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/dotnet",
+      "commit": "44525024595742ebe09023abe709df51de65009b"
+    },
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Memory/4.5.3",
+    "license": null,
+    "repository": {},
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Memory/4.6.3",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/maintenance-packages",
+      "commit": "f62ca0009b038cab4725a720f386623a969d73ad"
+    },
+    "project": "https://github.com/dotnet/maintenance-packages"
+  },
+  {
+    "package": "System.Numerics.Vectors/4.4.0",
+    "license": null,
+    "repository": {},
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Numerics.Vectors/4.6.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/maintenance-packages",
+      "commit": "6b84308c9ad012f53240d72c1d716d7e42546483"
+    },
+    "project": "https://github.com/dotnet/maintenance-packages"
+  },
+  {
+    "package": "System.Runtime.CompilerServices.Unsafe/4.5.2",
+    "license": null,
+    "repository": {},
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Runtime.CompilerServices.Unsafe/6.1.2",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/maintenance-packages",
+      "commit": "f62ca0009b038cab4725a720f386623a969d73ad"
+    },
+    "project": "https://github.com/dotnet/maintenance-packages"
+  },
+  {
+    "package": "System.Security.AccessControl/6.0.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/runtime",
+      "commit": "4822e3c3aa77eb82b2fb33c9321f923cf11ddde6"
+    },
+    "project": "https://dot.net/"
+  },
+  {
+    "package": "System.Security.Principal.Windows/5.0.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/dotnet/runtime",
+      "commit": "cf258a14b70ad9069470a108f13765e0e5988f51"
+    },
+    "project": "https://github.com/dotnet/runtime"
+  },
+  {
+    "package": "System.Threading.AccessControl/10.0.3",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/dotnet",
+      "commit": "c2435c3e0f46de784341ac3ed62863ce77e117b4"
+    },
+    "project": "https://dot.net/"
+  }
+]

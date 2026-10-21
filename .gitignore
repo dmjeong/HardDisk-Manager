@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.db
+*.db-shm
+*.db-wal
+*.log
+TestResults/
+artifacts/
+.DS_Store
+docs/.pdca-status.json
+docs/.bkit-memory.json

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net48</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ExplorerManager.Infrastructure/ExplorerManager.Infrastructure.csproj" />
+    <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+</Project>

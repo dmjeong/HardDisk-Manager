@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../ExplorerManager.Domain/ExplorerManager.Domain.csproj" /></ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net48</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ExplorerManager.Contracts/ExplorerManager.Contracts.csproj" />
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <Reference Include="System.Management" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ExplorerManager.Application/ExplorerManager.Application.csproj" />
+    <ProjectReference Include="../ExplorerManager.Contracts/ExplorerManager.Contracts.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.Management" />
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Security" />
+  </ItemGroup>
+</Project>

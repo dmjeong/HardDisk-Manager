@@ -1,0 +1,17 @@
+<Window x:Class="ExplorerManager.Desktop.LockAlertWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="강제 종료 후 삭제하시겠습니까?" Width="680" SizeToContent="Height" MinHeight="300" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+ <StackPanel Margin="24">
+  <TextBlock Text="사용 중인 파일을 건너뛰었습니다." FontSize="20" FontWeight="Bold" Margin="0,0,0,16"/>
+  <TextBlock Text="{Binding Message}" TextWrapping="Wrap" MaxHeight="240"/>
+  <TextBlock Text="강제 종료 후 삭제하시겠습니까?" FontWeight="Bold" FontSize="17" Margin="0,20,0,8"/>
+  <TextBlock Text="종료하면 저장하지 않은 작업이 사라질 수 있습니다. 대상 앱과 파일은 실행 직전에 다시 확인합니다." TextWrapping="Wrap" Foreground="#EDC27C"/>
+  <WrapPanel Margin="0,18,0,0">
+   <Button Content="건너뛰기" Command="{Binding Skip}" IsDefault="True" IsCancel="True"/>
+   <Button Content="다시 시도" Command="{Binding Retry}"/>
+   <Button Content="정상 종료 요청" Command="{Binding NormalClose}"/>
+   <Button Content="강제 종료 후 삭제" Command="{Binding ForceClose}" Style="{StaticResource DangerButton}"/>
+  </WrapPanel>
+ </StackPanel>
+</Window>
