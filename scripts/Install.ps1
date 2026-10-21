@@ -4,12 +4,12 @@ param([string]$InstallDirectory="$env:ProgramFiles\ExplorerManager", [switch]$No
 $ErrorActionPreference='Stop'
 function Set-ExplorerService([string]$Name,[string]$Display,[string]$Binary,[string]$Account) {
     $existing=Get-CimInstance -ClassName Win32_Service -Filter "Name='$Name'"
-    $arguments=@{PathName=$Binary;StartMode='Automatic';StartName=$Account}
+    $arguments=@{PathName=$Binary;StartMode='Automatic';StartName=$Account;StartPassword='';DesktopInteract=$false}
     if ($existing) {
         $result=Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments $arguments
     } else {
         $arguments.Name=$Name;$arguments.DisplayName=$Display
-        $arguments.ServiceType=[uint32]16;$arguments.ErrorControl=[uint32]1
+        $arguments.ServiceType=[byte]16;$arguments.ErrorControl=[byte]1
         $result=Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments $arguments
     }
     if ($result.ReturnValue -ne 0) { throw "Service configuration failed for $Name : $($result.ReturnValue)" }
