@@ -142,6 +142,9 @@ PRAGMA user_version=1;";
             lock (_sync)
             using (var c = Command("SELECT count(*),coalesce(sum(bytes),0) FROM candidates WHERE runid=$0", run.Id))
             using (var r = c.ExecuteReader()) { r.Read(); run.Candidates = r.GetInt32(0); run.CandidateBytes = r.GetInt64(1); }
+            lock (_sync)
+            using (var c = Command("SELECT count(*) FROM items WHERE runid=$0 AND state='Skipped'", run.Id))
+                run.Skipped = Convert.ToInt32(c.ExecuteScalar());
         }
         public void ClearCandidates(string runId) { lock (_sync) Exec("DELETE FROM candidates WHERE runid=$0", runId); }
         public void SaveAlert(AlertRecord a) { lock (_sync) Exec("INSERT OR REPLACE INTO alerts VALUES($0,$1,$2,$3)", a.Id, a.Utc.ToString("O"), a.Acknowledged ? 1 : 0, Json(a)); }

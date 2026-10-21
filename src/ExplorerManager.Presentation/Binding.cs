@@ -32,6 +32,7 @@ namespace ExplorerManager.Presentation
     }
     public interface IUiServices
     {
+        bool InputsValid { get; }
         Task<bool> ConfirmAsync(string title, string text);
         Task<int> ShowLockAlertAsync(AlertRecord alert);
         Task<string> PickFolderAsync();

@@ -10,7 +10,7 @@ namespace ExplorerManager.Presentation
     {
         private readonly DrivePolicy _policy;
         public bool IsDirty { get; private set; }
-        public PolicyEditor(DrivePolicy p) { _policy = p; _roots = string.Join(Environment.NewLine, p.Roots); _excluded = string.Join(Environment.NewLine, p.Exclusions); _extensions = string.Join(", ", p.ExcludedExtensions); }
+        public PolicyEditor(DrivePolicy p) { _policy = p; IsDirty = p.Version == 0; _roots = string.Join(Environment.NewLine, p.Roots); _excluded = string.Join(Environment.NewLine, p.Exclusions); _extensions = string.Join(", ", p.ExcludedExtensions); }
         public string Id => _policy.Id;
         public int Version => _policy.Version;
         public string Name { get => _policy.Name; set { _policy.Name = value; Edit(); } }

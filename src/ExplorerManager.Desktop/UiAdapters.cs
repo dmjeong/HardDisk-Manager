@@ -4,6 +4,8 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using ExplorerManager.Domain;
 using ExplorerManager.Presentation;
 using Microsoft.Win32;
@@ -16,6 +18,14 @@ namespace ExplorerManager.Desktop
         private readonly Window _owner;
         private readonly Action<string, string> _notify;
         public UiAdapters(Window owner, Action<string, string> notify) { _owner = owner; _notify = notify; }
+        public bool InputsValid => !HasErrors(_owner);
+        private static bool HasErrors(DependencyObject view)
+        {
+            if (Validation.GetHasError(view)) return true;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(view); i++)
+                if (HasErrors(VisualTreeHelper.GetChild(view, i))) return true;
+            return false;
+        }
         public Task<bool> ConfirmAsync(string title, string text) => Task.FromResult(MessageBox.Show(_owner, text, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes);
         public Task<int> ShowLockAlertAsync(AlertRecord alert)
         {

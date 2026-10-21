@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using ExplorerManager.Application;
+using ExplorerManager.Contracts;
+using ExplorerManager.Domain;
+using ExplorerManager.Infrastructure;
+using Newtonsoft.Json.Linq;
+using Xunit;
+
+namespace ExplorerManager.Tests
+{
+    public sealed class WindowsSafetyTests
+    {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool CreateHardLinkW(string name, string existing, IntPtr security);
+        [WindowsFact] public async Task NativeLockedFileIsSkippedWithAlert()
+        {
+            using (var f = new NativeFixture())
+            {
+                string path = f.OldFile("locked.bin");
+                using (var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var result = await f.Engine.RunAsync(f.Policy, false, "test", CancellationToken.None);
+                    Assert.Equal(0, result.DeletedFiles); Assert.True(File.Exists(path));
+                    Assert.Contains(f.Store.Alerts(), a => a.Category == "LockedFile" && a.Path == path);
+                }
+            }
+        }
+        [WindowsFact] public async Task AlternateDataStreamsAndHardlinksAreNeverDeleted()
+        {
+            using (var f = new NativeFixture())
+            {
+                string ads = f.OldFile("ads.bin");
+                File.WriteAllText(ads + ":Zone.Identifier", "test");
+                string hard = f.OldFile("hard.bin");
+                string outside = Path.Combine(f.Base, "other-link");
+                Assert.True(CreateHardLinkW(outside, hard, IntPtr.Zero));
+                var run = await f.Engine.RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(0, run.DeletedFiles); Assert.True(File.Exists(ads)); Assert.True(File.Exists(hard));
+                Assert.Equal("test", File.ReadAllText(ads + ":Zone.Identifier"));
+            }
+        }
+        [WindowsFact] public async Task JunctionDoesNotEscapeManagedRoot()
+        {
+            using (var f = new NativeFixture())
+            {
+                string outside = Path.Combine(f.Base, "outside"); Directory.CreateDirectory(outside);
+                string file = Path.Combine(outside, "keep.bin"); File.WriteAllText(file, "keep"); File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddDays(-60));
+                string link = Path.Combine(f.Root, "junction");
+                using (var cmd = Process.Start(new ProcessStartInfo("cmd.exe", "/c mklink /J \"" + link + "\" \"" + outside + "\"") { UseShellExecute = false, CreateNoWindow = true }))
+                { cmd.WaitForExit(); Assert.Equal(0, cmd.ExitCode); }
+                try { await f.Engine.RunAsync(f.Policy, false, "test", CancellationToken.None); Assert.True(File.Exists(file)); }
+                finally { Directory.Delete(link, false); }
+            }
+        }
+        [WindowsFact] public async Task DirectoryCannotBeReplacedWhileDeletionLeaseIsHeld()
+        {
+            using (var f = new NativeFixture())
+            {
+                f.OldFile("file.bin");
+                await f.Files.ScanAsync(f.Policy, DateTime.UtcNow.AddDays(-30), "test", f.Store, CancellationToken.None);
+                var candidate = f.Store.TakeNextCandidate("test");
+                using (var lease = f.Files.OpenVerified(candidate, f.Policy))
+                    Assert.ThrowsAny<IOException>(() => Directory.Move(f.Root, f.Root + "-moved"));
+            }
+        }
+        [WindowsFact] public void RuntimeRejectsUnprivilegedCallerAndDuplicatePolicySaveIsIdempotent()
+        {
+            using (var f = new NativeFixture())
+            using (var runtime = new ServiceRuntime(Path.Combine(f.Base, "runtime")))
+            {
+                Assert.Throws<UnauthorizedAccessException>(() => runtime.Execute(new Request { Command = "Dashboard" }, new Caller { Sid = "fake", Operator = false }));
+                var request = new Request { Command = "SavePolicy", Data = JObject.FromObject(f.Policy) };
+                var caller = new Caller { Sid = "test-operator", Operator = true };
+                var first = runtime.Execute(request, caller); var again = runtime.Execute(request, caller);
+                Assert.True(first.Success, first.Error); Assert.True(again.Success, again.Error);
+                Assert.Equal(1, first.Data.ToObject<DrivePolicy>().Version); Assert.Equal(first.Data.ToString(), again.Data.ToString());
+            }
+        }
+        private sealed class NativeFixture : IDisposable
+        {
+            public string Base { get; } = Path.Combine(Path.GetTempPath(), "ExplorerSafety-" + Guid.NewGuid().ToString("N"));
+            public string Root { get; }
+            public DrivePolicy Policy { get; }
+            public SqliteJournal Store { get; }
+            public RecoveryCache Cache { get; }
+            public WindowsFileSystem Files { get; }
+            public CleanupEngine Engine { get; }
+            public NativeFixture()
+            {
+                Root = Path.Combine(Base, "managed"); Directory.CreateDirectory(Root);
+                var volumes = new WindowsVolumeCatalog(); var volume = WindowsVolumeCatalog.Read(Path.GetPathRoot(Root));
+                Policy = new DrivePolicy { VolumeId = volume.Id, Roots = new List<string> { Root }, StartThreshold = 0.000001, StopThreshold = 0 };
+                Store = new SqliteJournal(Path.Combine(Base, "audit.db")); Cache = new RecoveryCache(1024 * 1024, Store.SetRecoveryState);
+                Files = new WindowsFileSystem(volumes);
+                Engine = new CleanupEngine(volumes, Files, Store, Cache, new SystemClock(), new AlwaysRun(), new RestartManagerInspector());
+            }
+            public string OldFile(string name)
+            { string path = Path.Combine(Root, name); File.WriteAllText(path, "test contents"); File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-60)); return path; }
+            public void Dispose() { Cache.Dispose(); Store.Dispose(); Directory.Delete(Base, true); }
+        }
+        private sealed class AlwaysRun : IExecutionGate { public string StopReason(DrivePolicy p) => null; }
+    }
+}

@@ -314,19 +314,21 @@ namespace ExplorerManager.Infrastructure
                 string target = Path.Combine(parent, Path.GetFileName(original.Path));
                 if (File.Exists(NativeMethods.LongPath(target)) || Directory.Exists(NativeMethods.LongPath(target)))
                     target += ".restored-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                string temp = Path.Combine(parent, ".explorermanager-" + Guid.NewGuid().ToString("N") + ".tmp");
+                string temp = original.IsDirectory ? target : Path.Combine(parent, ".explorermanager-" + Guid.NewGuid().ToString("N") + ".tmp");
                 SafeFileHandle handle = null;
                 bool published = false;
+                string createdId = null;
                 try
                 {
                     if (original.IsDirectory)
                     {
-                        NativeMethods.Check(NativeMethods.CreateDirectoryW(NativeMethods.LongPath(temp), IntPtr.Zero));
+                        CreateDirectoryWithDacl(temp, original.Dacl);
                         handle = NativeMethods.CreateFileW(NativeMethods.LongPath(temp), NativeMethods.GenericRead | NativeMethods.GenericWrite | NativeMethods.Delete | NativeMethods.WriteDac,
                             0, IntPtr.Zero, 3, NativeMethods.BackupSemantics | NativeMethods.OpenReparsePoint, IntPtr.Zero);
                     }
                     else handle = CreatePrivateFile(temp);
                     if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+                    createdId = NativeMethods.Id(handle);
                     if (!original.IsDirectory)
                     {
                         using (var output = new FileStream(handle, FileAccess.ReadWrite, 65536, false))
@@ -346,21 +348,33 @@ namespace ExplorerManager.Infrastructure
                             published = true;
                         }
                     }
-                    else { SetMetadataAndPublish(handle, original, target); published = true; handle.Dispose(); }
+                    else { SetMetadataAndPublish(handle, original, target, false); published = true; handle.Dispose(); }
                     var policy = new DrivePolicy { VolumeId = WindowsVolumeCatalog.Read(Path.GetPathRoot(target)).Id };
                     return Snapshot(target, targetDirectory ?? original.Root, policy, true);
                 }
                 finally
                 {
                     handle?.Dispose();
-                    if (!published)
+                    if (!published && createdId != null)
                     {
-                        try { if (original.IsDirectory) Directory.Delete(NativeMethods.LongPath(temp), false); else File.Delete(NativeMethods.LongPath(temp)); } catch { }
+                        // Delete only the output object this restore created, even after a path replacement.
+                        try
+                        {
+                            using (var cleanup = NativeMethods.CreateFileW(NativeMethods.LongPath(temp), NativeMethods.Delete | NativeMethods.ReadAttributes, 0, IntPtr.Zero, 3,
+                                NativeMethods.BackupSemantics | NativeMethods.OpenReparsePoint, IntPtr.Zero))
+                                if (!cleanup.IsInvalid && NativeMethods.Id(cleanup) == createdId)
+                                {
+                                    IntPtr disposition = Marshal.AllocHGlobal(1);
+                                    try { Marshal.WriteByte(disposition, 1); NativeMethods.SetFileInformationByHandle(cleanup, 4, disposition, 1); }
+                                    finally { Marshal.FreeHGlobal(disposition); }
+                                }
+                        }
+                        catch { }
                     }
                 }
             }
         }
-        private static void SetMetadataAndPublish(SafeFileHandle handle, FileSnapshot original, string target)
+        private static void SetMetadataAndPublish(SafeFileHandle handle, FileSnapshot original, string target, bool rename = true)
         {
             long created = original.CreationUtc.ToFileTimeUtc(), modified = original.LastWriteUtc.ToFileTimeUtc();
             NativeMethods.Check(NativeMethods.SetFileTime(handle, ref created, IntPtr.Zero, ref modified));
@@ -374,6 +388,7 @@ namespace ExplorerManager.Infrastructure
             }
             finally { Marshal.FreeHGlobal(basic); }
             NativeMethods.ApplyDacl(handle, original.Dacl);
+            if (!rename) return;
             byte[] name = Encoding.Unicode.GetBytes(NativeMethods.LongPath(target));
             IntPtr info = Marshal.AllocHGlobal(20 + name.Length);
             try
@@ -398,6 +413,18 @@ namespace ExplorerManager.Infrastructure
                     0, sa, 1, 0x80, IntPtr.Zero);
                 if (h.IsInvalid) { h.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
                 return h;
+            }
+            finally { Marshal.FreeHGlobal(sa); NativeMethods.LocalFree(sd); }
+        }
+        private static void CreateDirectoryWithDacl(string path, string dacl)
+        {
+            IntPtr sd; uint length;
+            NativeMethods.Check(NativeMethods.ConvertStringSecurityDescriptorToSecurityDescriptorW(dacl, 1, out sd, out length));
+            IntPtr sa = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(NativeMethods.SecurityAttributes)));
+            try
+            {
+                Marshal.StructureToPtr(new NativeMethods.SecurityAttributes { Length = Marshal.SizeOf(typeof(NativeMethods.SecurityAttributes)), Descriptor = sd }, sa, false);
+                NativeMethods.Check(NativeMethods.CreateDirectoryW(NativeMethods.LongPath(path), sa));
             }
             finally { Marshal.FreeHGlobal(sa); NativeMethods.LocalFree(sd); }
         }

@@ -144,5 +144,62 @@ namespace ExplorerManager.Tests
                 Assert.Throws<InvalidOperationException>(() => f.Store.RequestReceipt("sid", "id", "other"));
             }
         }
+        [Fact] public async Task FolderSummariesDoNotDoubleCountChildren()
+        {
+            using (var f = new Fixture())
+            {
+                var a = f.Add("D:\\a\\first", 60);
+                var b = f.Add("D:\\a\\second", 40);
+                a.ParentPath = b.ParentPath = "D:\\a";
+                await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                var folder = f.Store.Folders("", 0).Single();
+                Assert.Equal(2, folder.DeletedFiles); Assert.Equal(120, folder.LogicalBytes); Assert.Equal(120, folder.ObservedFreeDelta);
+            }
+        }
+        [Fact] public async Task RechecksSpaceAfterCopyBeforeDeleting()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\first", 60);
+                var wrapped = new AfterCaptureCache(f.Cache, () => f.Free = 500);
+                var run = await f.Engine(cache: wrapped).RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Empty(f.Deleted); Assert.Empty(f.Cache.List()); Assert.Equal(0, f.Cache.Used); Assert.Equal("TargetReached", run.State);
+            }
+        }
+        [Fact] public async Task AuditIntentFailurePreventsDeletionAndReleasesCache()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add("D:\\a\\first", 60);
+                await Assert.ThrowsAsync<InvalidOperationException>(() => f.Engine(new FailIntentJournal(f.Store)).RunAsync(f.Policy, false, "test", CancellationToken.None));
+                Assert.Empty(f.Deleted); Assert.Equal(0, f.Cache.Used);
+            }
+        }
+        private sealed class AfterCaptureCache : IRecoveryCache
+        {
+            private readonly IRecoveryCache _inner; private readonly Action _after;
+            public AfterCaptureCache(IRecoveryCache inner, Action after) { _inner = inner; _after = after; }
+            public long Capacity => _inner.Capacity; public long Used => _inner.Used; public string Epoch => _inner.Epoch;
+            public bool CanFit(FileSnapshot f) => _inner.CanFit(f);
+            public async Task<RecoveryInfo> CaptureAsync(FileSnapshot f, Stream s, string i, string r, string p, long rate, CancellationToken ct)
+            { var result = await _inner.CaptureAsync(f, s, i, r, p, rate, ct); _after(); return result; }
+            public void Commit(string i, bool c) => _inner.Commit(i, c); public void Remove(string i, string r) => _inner.Remove(i, r);
+            public IList<RecoveryInfo> List() => _inner.List(); public IRecoveryLease Pin(string i) => _inner.Pin(i);
+        }
+        private sealed class FailIntentJournal : IJournal
+        {
+            private readonly IJournal _j; public FailIntentJournal(IJournal j) { _j = j; }
+            public void SaveRun(RunRecord r) => _j.SaveRun(r);
+            public void RecordItem(ItemRecord i) { if (i.State == "DeleteIntent") throw new InvalidOperationException("Audit unavailable"); _j.RecordItem(i); }
+            public void AddCandidate(string r, FileSnapshot f) => _j.AddCandidate(r, f);
+            public FileSnapshot TakeNextCandidate(string r) => _j.TakeNextCandidate(r);
+            public void ClearCandidates(string r) => _j.ClearCandidates(r);
+            public void SetCandidateTotals(RunRecord r) => _j.SetCandidateTotals(r);
+            public void SaveAlert(AlertRecord a) => _j.SaveAlert(a);
+            public void SetRecoveryState(string i, string s) => _j.SetRecoveryState(i, s);
+            public bool IsProtected(FileSnapshot f, DateTime n) => _j.IsProtected(f, n);
+            public void Protect(FileSnapshot f, DateTime d) => _j.Protect(f, d);
+            public void RecordEvent(string a, string b, string c, string d) => _j.RecordEvent(a, b, c, d);
+        }
     }
 }

@@ -69,6 +69,7 @@ namespace ExplorerManager.Presentation
             NormalCloseCommand = Command(() => CloseSelectedAsync(false));
             SaveSettingsCommand = Command(async () =>
             {
+                if (!_ui.InputsValid) throw new InvalidOperationException("입력 오류를 먼저 수정하세요.");
                 Settings.AllowedProcessNames = AllowedApps.Split(new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
                 await _client.SendAsync<object>("SaveSettings", Settings); Message = "환경설정을 저장했습니다.";
             });
@@ -171,6 +172,7 @@ namespace ExplorerManager.Presentation
         }
         private async Task SavePolicyAsync()
         {
+            if (!_ui.InputsValid) throw new InvalidOperationException("입력 오류를 먼저 수정하세요.");
             if (SelectedPolicy == null) throw new InvalidOperationException("정책을 선택하세요.");
             var p = SelectedPolicy.ToPolicy(); var errors = PolicyRules.Validate(p);
             if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
