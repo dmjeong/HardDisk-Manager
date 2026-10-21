@@ -7,12 +7,13 @@ $builder = (Get-Command msbuild -ErrorAction Stop).Source
 if ($LASTEXITCODE -ne 0) { throw "Build failed: $LASTEXITCODE" }
 $stage = Join-Path $repo 'artifacts/app'
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-New-Item "$stage/Service","$stage/Desktop" -ItemType Directory -Force | Out-Null
+New-Item "$stage/Service","$stage/Desktop","$stage/SensorHost" -ItemType Directory -Force | Out-Null
 Copy-Item "$repo/src/ExplorerManager.Service/bin/$Configuration/net48/*" "$stage/Service" -Recurse -Force
-Copy-Item "$repo/src/ExplorerManager.SensorHost/bin/$Configuration/net48/*" "$stage/Service" -Recurse -Force
+Copy-Item "$repo/src/ExplorerManager.SensorHost/bin/$Configuration/net48/*" "$stage/SensorHost" -Recurse -Force
 Copy-Item "$repo/src/ExplorerManager.Desktop/bin/$Configuration/net48/*" "$stage/Desktop" -Recurse -Force
 Copy-Item "$repo/scripts/Install.ps1","$repo/scripts/Uninstall.ps1","$repo/scripts/Grant-ManagedRoot.ps1" "$repo/artifacts" -Force
 Copy-Item "$repo/README.md","$repo/THIRD-PARTY-NOTICES.md" "$repo/artifacts" -Force
+if (Test-Path "$repo/artifacts/licenses") { Remove-Item "$repo/artifacts/licenses" -Recurse -Force }
 Copy-Item "$repo/licenses" "$repo/artifacts/licenses" -Recurse -Force
 if ($CertificateThumbprint) {
     $sign = (Get-Command signtool -ErrorAction Stop).Source

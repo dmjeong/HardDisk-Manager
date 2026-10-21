@@ -1,4 +1,5 @@
 #Requires -RunAsAdministrator
+#Requires -PSEdition Desktop
 [CmdletBinding()]
 param([string]$InstallDirectory="$env:ProgramFiles\ExplorerManager", [switch]$NoStartUi, [switch]$NoAutoStart, [switch]$NoHardwareSensors)
 $ErrorActionPreference='Stop'
@@ -44,8 +45,17 @@ function Set-ExplorerService([string]$Name,[string]$Display,[string]$Binary,[str
 }
 $source = Join-Path $PSScriptRoot 'app'
 if (-not (Test-Path "$source/Service/ExplorerManager.Service.exe")) { throw 'Extract the complete build package, then run Install.ps1 next to app/.' }
+if (-not $NoHardwareSensors -and -not (Test-Path "$source/SensorHost/ExplorerManager.SensorHost.exe")) { throw 'SensorHost files are missing from the package.' }
 $InstallDirectory = [IO.Path]::GetFullPath($InstallDirectory).TrimEnd('\')
 if ($InstallDirectory.Length -lt 10 -or $InstallDirectory -eq [IO.Path]::GetPathRoot($InstallDirectory).TrimEnd('\')) { throw 'Invalid installation path.' }
+$trustedRoot=[Environment]::GetFolderPath('ProgramFiles').TrimEnd('\')
+if (-not $InstallDirectory.StartsWith($trustedRoot+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Install the service under a protected Program Files subdirectory.' }
+if ((Test-Path $InstallDirectory) -and (Get-ChildItem -LiteralPath $InstallDirectory -Force) -and -not (Test-Path "$InstallDirectory/.explorermanager-install.json")) { throw 'Installation directory must be empty or an existing Explorer Manager installation.' }
+$checkPath=$InstallDirectory
+while ($checkPath.Length -gt 3) {
+    if ((Test-Path -LiteralPath $checkPath) -and ((Get-Item -LiteralPath $checkPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Reparse installation paths are not allowed.' }
+    $checkPath=Split-Path $checkPath -Parent
+}
 if (Get-Service ExplorerManager -ErrorAction SilentlyContinue) {
     Write-Warning 'Updating the service clears all RAM recovery copies.'
     Stop-Service ExplorerManager -ErrorAction Stop
@@ -81,7 +91,7 @@ if (-not [Diagnostics.EventLog]::SourceExists('ExplorerManager')) { New-EventLog
 & sc.exe failure ExplorerManager reset= 86400 actions= restart/10000/restart/30000/restart/60000 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Service recovery configuration failed.' }
 if (-not $NoHardwareSensors) {
-    $sensorExe=Join-Path $InstallDirectory 'Service\ExplorerManager.SensorHost.exe'
+    $sensorExe=Join-Path $InstallDirectory 'SensorHost\ExplorerManager.SensorHost.exe'
     Set-ExplorerService 'ExplorerManagerSensors' 'Explorer Manager Hardware Sensors' ('"'+$sensorExe+'" --service') 'LocalSystem'
     & sc.exe failure ExplorerManagerSensors reset= 86400 actions= restart/10000/restart/30000/restart/60000 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Sensor recovery configuration failed.' }

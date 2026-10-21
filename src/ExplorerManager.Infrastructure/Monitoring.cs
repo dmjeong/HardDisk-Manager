@@ -139,7 +139,7 @@ namespace ExplorerManager.Infrastructure
                         await Task.Delay(5000, ct).ConfigureAwait(false); continue;
                     }
                     catch (Exception ex) when (ex is IOException || ex is TimeoutException || ex is OperationCanceledException || ex is UnauthorizedAccessException) { if (ct.IsCancellationRequested) return; }
-                    string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ExplorerManager.SensorHost.exe");
+                    string path = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "SensorHost", "ExplorerManager.SensorHost.exe"));
                     if (!File.Exists(path)) throw new FileNotFoundException("센서 호스트가 없습니다.", path);
                     _sensor = Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
                         StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, CreateNoWindow = true });

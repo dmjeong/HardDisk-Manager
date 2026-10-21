@@ -31,9 +31,11 @@ namespace ExplorerManager.Infrastructure
             path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
         public static bool Protected(string path)
         {
+            string volumeRoot = Path.GetPathRoot(path);
             foreach (var root in new[] { Environment.GetFolderPath(Environment.SpecialFolder.Windows),
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ExplorerManager") })
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ExplorerManager"),
+                Path.Combine(volumeRoot, "Windows"), Path.Combine(volumeRoot, "Program Files"), Path.Combine(volumeRoot, "Program Files (x86")) })
                 if (!string.IsNullOrEmpty(root) && Within(path, root)) return true;
             var parts = path.Split('\\');
             return parts.Any(x => x.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase) ||
@@ -49,7 +51,12 @@ namespace ExplorerManager.Infrastructure
             var roots = p.Roots.Select(Normalize).ToList();
             foreach (string root in roots)
             {
-                if (root.Length <= 3 || Protected(root) || !Directory.Exists(root)) throw new ArgumentException("등록할 수 없는 루트: " + root);
+                string profiles = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "Users");
+                if (root.Length <= 3 || Protected(root) || !Directory.Exists(root) ||
+                    string.Equals(root, profiles, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Path.GetDirectoryName(root), profiles, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(root, Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("등록할 수 없는 루트: " + root);
                 if (!string.Equals(WindowsVolumeCatalog.Read(Path.GetPathRoot(root)).Id, p.VolumeId, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("정책과 다른 볼륨의 경로입니다.");
                 using (var guards = new DirectoryGuards(root)) { }
             }
