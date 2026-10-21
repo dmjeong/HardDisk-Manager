@@ -22,6 +22,7 @@ namespace ExplorerManager.Presentation
         private AlertRecord _selectedAlert;
         private RecoveryInfo _selectedRecovery;
         private AppSettings _settings = new AppSettings();
+        private string _selectedDisk;
         private int _historyOffset;
         private bool _more;
         public MainViewModel(IExplorerClient client, IUiServices ui)
@@ -86,6 +87,15 @@ namespace ExplorerManager.Presentation
         public ObservableCollection<FolderSummary> Folders { get; } = new ObservableCollection<FolderSummary>();
         public ObservableCollection<RecoveryInfo> Recovery { get; } = new ObservableCollection<RecoveryInfo>();
         public ObservableCollection<double> CpuSeries { get; } = new ObservableCollection<double>();
+        public ObservableCollection<string> DiskEntities { get; } = new ObservableCollection<string>();
+        public ObservableCollection<double> ReadSeries { get; } = new ObservableCollection<double>();
+        public ObservableCollection<double> WriteSeries { get; } = new ObservableCollection<double>();
+        public ObservableCollection<double> LatencySeries { get; } = new ObservableCollection<double>();
+        public string SelectedDisk
+        {
+            get => _selectedDisk;
+            set { if (Set(ref _selectedDisk, value)) { ReadSeries.Clear(); WriteSeries.Clear(); LatencySeries.Clear(); } }
+        }
         public ThresholdMode[] Modes => (ThresholdMode[])Enum.GetValues(typeof(ThresholdMode));
         public AgeBasis[] AgeOptions => (AgeBasis[])Enum.GetValues(typeof(AgeBasis));
         public string Message { get => _message; set => Set(ref _message, value); }
@@ -148,6 +158,13 @@ namespace ExplorerManager.Presentation
                 SelectedRecovery = Recovery.FirstOrDefault(x => x.Id == recoveryId); RecoveryFolder = recoveryFolder;
                 var cpu = state.Metrics.FirstOrDefault(x => x.Name == "CPU" && x.Quality == "Valid")?.Value;
                 if (cpu.HasValue) { CpuSeries.Add(cpu.Value); while (CpuSeries.Count > 120) CpuSeries.RemoveAt(0); }
+                string disk = SelectedDisk;
+                var entities = state.Metrics.Where(x => x.Entity != null && x.Entity.StartsWith("Disk", StringComparison.Ordinal)).Select(x => x.Entity).Distinct().OrderBy(x => x).ToList();
+                if (!DiskEntities.SequenceEqual(entities))
+                { Replace(DiskEntities, entities); SelectedDisk = entities.Contains(disk) ? disk : entities.FirstOrDefault(); }
+                Append(ReadSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "ReadBytes" && x.Quality == "Valid")?.Value);
+                Append(WriteSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "WriteBytes" && x.Quality == "Valid")?.Value);
+                Append(LatencySeries, state.Metrics.Where(x => x.Entity == SelectedDisk && (x.Name == "ReadLatency" || x.Name == "WriteLatency") && x.Quality == "Valid" && x.Value.HasValue).Select(x => x.Value).DefaultIfEmpty(null).Max());
                 if (!_historyLoaded)
                 {
                     Settings = await _client.SendAsync<AppSettings>("Settings"); AllowedApps = string.Join(Environment.NewLine, Settings.AllowedProcessNames);
@@ -217,5 +234,7 @@ namespace ExplorerManager.Presentation
         }
         private static void Replace<T>(ObservableCollection<T> target, System.Collections.Generic.IEnumerable<T> source)
         { target.Clear(); foreach (var value in source) target.Add(value); }
+        private static void Append(ObservableCollection<double> values, double? value)
+        { values.Add(value ?? double.NaN); while (values.Count > 120) values.RemoveAt(0); }
     }
 }

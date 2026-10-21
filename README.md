@@ -7,7 +7,7 @@
 - WPF · .NET Framework 4.8 · x64 · MVVM
 - Windows Service: 스케줄, 삭제, 감사 이력, 전역 1GiB 복구 캐시
 - Desktop: 정책, 미리보기, 실행 상태, 이력/CSV, 복구, 알람, 트레이
-- SensorHost: CPU/디스크 센서 수집과 장애 격리
+- SensorHost: CPU/디스크 센서 수집과 장애 격리. 기본 설치는 읽기 전용 LocalSystem 센서 서비스도 등록
 - Named Pipe: 관리자 인증, 로컬 전용, 요청 중복 실행 방지
 - SQLite: 정책·삭제 저널·알람·성능 집계
 
@@ -21,7 +21,9 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 4. 관리할 폴더에 서비스 권한을 부여합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
 5. WPF 앱을 관리자 권한으로 실행하고 **정책 저장 → 미리보기 → 결과 확인 → 자동 삭제 활성화** 순서로 설정합니다.
 
-서비스 이름은 `ExplorerManager`, 데이터는 `%ProgramData%\ExplorerManager\Data`입니다. 창을 닫으면 트레이로 이동하며, 트레이에서 화면을 종료해도 서비스는 계속 실행됩니다. 기본 설치는 설치한 운영자 계정의 로그인 시 UI를 관리자 권한으로 실행하는 작업을 등록합니다.
+삭제 서비스 이름은 `ExplorerManager`(전용 가상 계정), 하드웨어 센서 서비스는 `ExplorerManagerSensors`(LocalSystem)입니다. 센서 서비스는 측정값만 제공하며 삭제·프로세스 종료 명령을 받지 않습니다. `Install.ps1 -NoHardwareSensors`로 관리자 센서를 제외할 수 있습니다.
+
+데이터는 `%ProgramData%\ExplorerManager\Data`입니다. 창을 닫으면 트레이로 이동하며, 트레이에서 화면을 종료해도 서비스는 계속 실행됩니다. 기본 설치는 설치한 운영자 계정의 로그인 시 UI를 관리자 권한으로 실행하는 작업을 등록합니다.
 
 자동 삭제는 설치 직후 비활성 상태입니다. 수동 정리도 용량·기간·보호 규칙을 그대로 적용합니다. NAS/UNC, USB 자동 정리, ReFS는 v1 대상에 포함하지 않습니다.
 

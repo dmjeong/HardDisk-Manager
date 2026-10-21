@@ -13,6 +13,8 @@ using ExplorerManager.Infrastructure;
 using Newtonsoft.Json.Linq;
 using Xunit;
 using Microsoft.Win32.SafeHandles;
+using System.Security.Principal;
+using ExplorerManager.Client;
 
 namespace ExplorerManager.Tests
 {
@@ -87,6 +89,28 @@ namespace ExplorerManager.Tests
                 var first = runtime.Execute(request, caller); var again = runtime.Execute(request, caller);
                 Assert.True(first.Success, first.Error); Assert.True(again.Success, again.Error);
                 Assert.Equal(1, first.Data.ToObject<DrivePolicy>().Version); Assert.Equal(first.Data.ToString(), again.Data.ToString());
+            }
+        }
+        [WindowsFact] public async Task ForceCloseBrokerRejectsChangedIdentityAndTerminatesOnlyOwnedTestChild()
+        {
+            using (var child = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "ping.exe"), "-n 30 127.0.0.1")
+            { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true }))
+            {
+                try
+                {
+                    var identity = ProcessIdentityReader.Read(child.Id);
+                    identity.CanTerminate = true; // Test broker with an already approved, owned disposable child.
+                    var ticket = new UnlockTicket { OperatorSid = WindowsIdentity.GetCurrent().User.Value,
+                        SessionId = Process.GetCurrentProcess().SessionId, ExpiresUtc = DateTime.UtcNow.AddSeconds(30),
+                        Processes = new List<ProcessIdentity> { identity } };
+                    identity.StartTimeUtcTicks++;
+                    await Assert.ThrowsAsync<InvalidOperationException>(() => ProcessTermination.ExecuteAsync(ticket, true, CancellationToken.None));
+                    Assert.False(child.HasExited);
+                    identity.StartTimeUtcTicks--;
+                    await ProcessTermination.ExecuteAsync(ticket, true, CancellationToken.None);
+                    Assert.True(child.WaitForExit(1000));
+                }
+                finally { if (!child.HasExited) child.Kill(); }
             }
         }
         private sealed class NativeFixture : IDisposable

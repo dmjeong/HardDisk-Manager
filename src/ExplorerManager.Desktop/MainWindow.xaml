@@ -121,7 +121,15 @@
     </DockPanel>
    </TabItem>
    <TabItem Header="자원 모니터">
-    <DockPanel><TextBlock DockPanel.Dock="Top" Text="점유 용량은 대시보드, 아래 표는 I/O 부하와 센서 표본입니다. 0 B/s는 유휴일 수 있습니다. 온도 미지원은 상태에 표시됩니다." TextWrapping="Wrap" Margin="4,4,4,14"/>
+    <DockPanel><StackPanel DockPanel.Dock="Top">
+     <TextBlock Text="점유 용량은 대시보드, 아래 표는 I/O 부하와 센서 표본입니다. 0 B/s는 유휴일 수 있습니다. 온도 미지원은 상태에 표시됩니다." TextWrapping="Wrap" Margin="4,4,4,14"/>
+     <StackPanel Orientation="Horizontal"><TextBlock Text="디스크 장치" Margin="4"/><ComboBox Width="180" ItemsSource="{Binding DiskEntities}" SelectedItem="{Binding SelectedDisk}"/></StackPanel>
+     <UniformGrid Columns="3" Height="170" Margin="0,0,0,14">
+      <GroupBox Header="읽기 처리량 · MiB/s"><local:Sparkline Values="{Binding ReadSeries}" Maximum="0"/></GroupBox>
+      <GroupBox Header="쓰기 처리량 · MiB/s"><local:Sparkline Values="{Binding WriteSeries}" Maximum="0"/></GroupBox>
+      <GroupBox Header="읽기/쓰기 최대 지연 · ms"><local:Sparkline Values="{Binding LatencySeries}" Maximum="0"/></GroupBox>
+     </UniformGrid>
+    </StackPanel>
      <DataGrid ItemsSource="{Binding Metrics}"><DataGrid.Columns>
       <DataGridTextColumn Header="장치" Binding="{Binding Entity}" Width="180"/><DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="180"/>
       <DataGridTextColumn Header="값" Binding="{Binding Display}" Width="140"/><DataGridTextColumn Header="표본 상태" Binding="{Binding Quality}" Width="140"/>

@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup>
   <ItemGroup><ProjectReference Include="../ExplorerManager.Contracts/ExplorerManager.Contracts.csproj" /></ItemGroup>
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo"><_Parameter1>ExplorerManager.Tests</_Parameter1></AssemblyAttribute></ItemGroup>
 </Project>
