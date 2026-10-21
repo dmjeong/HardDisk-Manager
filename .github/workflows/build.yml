@@ -7,36 +7,27 @@ on:
 permissions:
   contents: read
 jobs:
-  core:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Portable policy, cache, audit, engine and architecture tests
-        run: dotnet test tests/ExplorerManager.Tests/ExplorerManager.Tests.csproj -f net8.0 --logger "trx;LogFileName=core.trx" -p:NoWarn=CA1416
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: core-tests
-          path: '**/TestResults/*.trx'
   windows:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      # A Framework solution must evaluate and build without resolving a .NET SDK.
+      MSBuildSDKsPath: '${{ github.workspace }}\sdk-disabled'
+      DOTNET_MSBUILD_SDK_RESOLVER_CLI_DIR: '${{ github.workspace }}\sdk-disabled'
+      MSBuildEnableWorkloadResolver: 'false'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
       - uses: microsoft/setup-msbuild@v2
       - name: Build WPF, service, sensor host and package
         shell: powershell
         run: ./scripts/Build.ps1
       - name: .NET Framework 4.8 and real NTFS integration tests
         shell: powershell
+        run: ./scripts/Test.ps1
+      - name: Visual Studio WPF design-time project evaluation
+        shell: powershell
         run: |
-          dotnet test tests/ExplorerManager.Tests/ExplorerManager.Tests.csproj -f net48 -c Release --no-build --logger "trx;LogFileName=windows.trx"
+          msbuild src/ExplorerManager.Desktop/ExplorerManager.Desktop.csproj /t:ResolveReferences /p:Configuration=Release /p:DesignTimeBuild=true /p:BuildingInsideVisualStudio=true /nologo /verbosity:minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Service install, authenticated IPC, WPF render, uninstall
         shell: powershell

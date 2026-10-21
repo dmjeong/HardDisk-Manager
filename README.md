@@ -55,20 +55,25 @@ CPU 사용률, 가용 RAM, 볼륨 용량, 디스크 읽기·쓰기 처리량/IOP
 
 ## 빌드와 검증
 
-Windows에서 Visual Studio 2022 Build Tools의 .NET 데스크톱 개발 구성과 .NET Framework 4.8 개발 팩, .NET 8 SDK가 필요합니다. 개발자 PowerShell에서:
+Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NET Framework 4.8 SDK/타기팅 팩**을 설치합니다. 모든 프로젝트는 기존 .NET Framework 프로젝트 형식이며, .NET 8 런타임·SDK·타기팅 팩을 요구하지 않습니다. NuGet 패키지는 프로젝트를 처음 열 때 복원합니다.
+
+`ExplorerManager.sln`을 열고 `ExplorerManager.Desktop`을 시작 프로젝트로 지정합니다. 서비스 설치 전에도 Desktop 창은 열리며 서비스 연결 상태를 표시합니다. 백그라운드 기능을 사용하려면 앞의 설치 절차로 서비스를 등록해야 합니다.
+
+개발자 PowerShell에서 솔루션 빌드와 .NET Framework 시험을 실행합니다. 시험 실행에는 Visual Studio Test Explorer/Test Tools가 필요합니다.
 
 ```powershell
 ./scripts/Build.ps1
-dotnet test tests/ExplorerManager.Tests/ExplorerManager.Tests.csproj -f net48 -c Release --no-build
+./scripts/Test.ps1
 ```
 
-순수 정책/캐시/삭제 조정/감사 로직은 macOS·Linux에서도 검증할 수 있습니다:
+예전 버전에서 `net8.0` 참조 오류로 프로젝트가 로드되지 않았다면:
 
-```sh
-dotnet test tests/ExplorerManager.Tests/ExplorerManager.Tests.csproj -f net8.0 -p:NoWarn=CA1416
-```
+1. Visual Studio에서 솔루션을 닫고 최신 `main`을 받습니다.
+2. 이전 `global.json`이 남아 있지 않은지 확인합니다. 최신 버전에는 이 파일이 없습니다.
+3. 이전 평가 결과가 남아 있으면 `.vs`와 각 프로젝트의 `bin`·`obj`를 지우고 솔루션을 다시 엽니다.
+4. NuGet 패키지 복원 후 다시 빌드합니다. .NET Framework 4.8 **개발 팩**은 런타임과 별개이므로 설치 관리자에서 확인합니다.
 
-배포 프로그램의 대상은 net48입니다. net8.0은 동일 소스의 휴대 가능한 자동 시험용 대상입니다. CI는 WPF와 서비스를 빌드하고 실제 NTFS 삭제·복구, 서비스 설치·IPC·WPF 렌더·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
+솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 44개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·7개 WPF 화면 렌더·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
 
 ## 운영과 문서
 

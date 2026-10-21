@@ -1,4 +1,19 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../ExplorerManager.Domain/ExplorerManager.Domain.csproj" /></ItemGroup>
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <ProjectGuid>{F6924EE7-A97D-472B-95FF-CBD3E36CE78C}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ExplorerManager.Application</RootNamespace>
+    <AssemblyName>ExplorerManager.Application</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="CleanupEngine.cs" />
+    <Compile Include="Ports.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

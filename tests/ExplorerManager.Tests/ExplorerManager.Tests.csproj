@@ -1,15 +1,37 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net48</TargetFrameworks>
+    <ProjectGuid>{B619ECA8-969B-4AD5-AA40-3ACB8021B1CA}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ExplorerManager.Tests</RootNamespace>
+    <AssemblyName>ExplorerManager.Tests</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
-    <ProjectReference Include="../../src/ExplorerManager.Infrastructure/ExplorerManager.Infrastructure.csproj" />
-    <ProjectReference Include="../../src/ExplorerManager.Presentation/ExplorerManager.Presentation.csproj" />
-    <ProjectReference Include="../../src/ExplorerManager.Client/ExplorerManager.Client.csproj" />
+    <Compile Include="ArchitectureTests.cs" />
+    <Compile Include="CacheTests.cs" />
+    <Compile Include="EngineTests.cs" />
+    <Compile Include="PolicyTests.cs" />
+    <Compile Include="PresentationTests.cs" />
+    <Compile Include="WindowsSafetyTests.cs" />
+    <Compile Include="WindowsTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExplorerManager.Application\ExplorerManager.Application.csproj"><Project>{F6924EE7-A97D-472B-95FF-CBD3E36CE78C}</Project><Name>ExplorerManager.Application</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\ExplorerManager.Client\ExplorerManager.Client.csproj"><Project>{58A76194-0716-47C4-A52D-0AC1406F069B}</Project><Name>ExplorerManager.Client</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\ExplorerManager.Contracts\ExplorerManager.Contracts.csproj"><Project>{C1C0C0C5-5F70-4695-AE7F-F118C342CB93}</Project><Name>ExplorerManager.Contracts</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\ExplorerManager.Infrastructure\ExplorerManager.Infrastructure.csproj"><Project>{A46F0C36-79D0-4B0B-A563-92CE441F5BA8}</Project><Name>ExplorerManager.Infrastructure</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\ExplorerManager.Presentation\ExplorerManager.Presentation.csproj"><Project>{EE39B1B0-91CB-4DB9-A607-F930F417AC24}</Project><Name>ExplorerManager.Presentation</Name></ProjectReference>
+  </ItemGroup>
+  <ItemGroup><None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

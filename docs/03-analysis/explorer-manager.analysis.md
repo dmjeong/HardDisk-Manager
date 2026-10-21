@@ -23,7 +23,9 @@
 
 ## 검증 범위
 
-자동 시험 44개 중 34개는 macOS/Linux에서도 실행하며, 10개는 Windows의 NTFS·서비스 경계·프로세스·PDH를 검증한다. Windows에서는 44개 모두 실행한다. 별도의 설치 연동 시험은 전용 가상 계정과 읽기 전용 센서 서비스 설치, 관리자 인증 Pipe, 실제 WPF 클라이언트 연결, 화면 PNG 생성, 제거를 수행한다.
+자동 시험 44개는 모두 .NET Framework 4.8에서 실행하며, 10개는 Windows의 NTFS·서비스 경계·프로세스·PDH를 직접 검증한다. 나머지는 정책·캐시·감사·엔진·ViewModel·계층 경계를 검증한다. 별도의 설치 연동 시험은 전용 가상 계정과 읽기 전용 센서 서비스 설치, 관리자 인증 Pipe, 실제 WPF 클라이언트 연결, 7개 화면 PNG 생성, 제거를 수행한다.
+
+초기 SDK 형식 공용 프로젝트와 테스트의 `net8.0` 멀티타깃 및 `global.json`의 SDK 8 고정은 .NET Framework 4.8 개발 환경에서 Desktop 프로젝트 로드를 막을 수 있었다. 전체 10개 프로젝트를 기존 Framework 형식으로 전환하고 SDK 고정과 .NET 8 타깃을 제거했다. 회귀 검증은 .NET SDK 경로를 비활성화한 Windows MSBuild 빌드와 Desktop의 Visual Studio 디자인 시점 참조 평가를 포함한다.
 
 처음 전체 통과한 검증은 [Windows와 core CI 실행](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39551320886)에서 확인할 수 있다. 후속 변경의 결과와 실행 패키지는 [Actions](https://github.com/dmjeong/HardDisk-Manager/actions)에서 해당 커밋을 기준으로 확인한다.
 

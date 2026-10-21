@@ -1,5 +1,22 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../ExplorerManager.Contracts/ExplorerManager.Contracts.csproj" /></ItemGroup>
-  <ItemGroup><AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo"><_Parameter1>ExplorerManager.Tests</_Parameter1></AssemblyAttribute></ItemGroup>
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <ProjectGuid>{58A76194-0716-47C4-A52D-0AC1406F069B}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ExplorerManager.Client</RootNamespace>
+    <AssemblyName>ExplorerManager.Client</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="EndpointVerifier.cs" />
+    <Compile Include="PipeClient.cs" />
+    <Compile Include="ProcessTermination.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ExplorerManager.Contracts\ExplorerManager.Contracts.csproj"><Project>{C1C0C0C5-5F70-4695-AE7F-F118C342CB93}</Project><Name>ExplorerManager.Contracts</Name></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

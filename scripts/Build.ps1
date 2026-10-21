@@ -3,7 +3,7 @@ param([ValidateSet('Debug','Release')][string]$Configuration='Release', [string]
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $builder = (Get-Command msbuild -ErrorAction Stop).Source
-& $builder (Join-Path $repo 'ExplorerManager.sln') /restore /m "/p:Configuration=$Configuration" /p:TargetFramework=net48 /nologo /verbosity:minimal
+& $builder (Join-Path $repo 'ExplorerManager.sln') /restore /m "/p:Configuration=$Configuration" /nologo /verbosity:minimal
 if ($LASTEXITCODE -ne 0) { throw "Build failed: $LASTEXITCODE" }
 $stage = Join-Path $repo 'artifacts/app'
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }

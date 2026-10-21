@@ -11,7 +11,7 @@
 - ExplorerManager.Service: 전용 가상 계정으로 실행하는 삭제·스케줄·감사·캐시 호스트.
 - ExplorerManager.SensorHost: LocalSystem의 읽기 전용 센서 서비스와 제한 권한 대체 실행.
 - scripts: 빌드, 관리자 설치, 관리 루트 권한 부여, 제거, 연동 검증.
-- .github/workflows/build.yml: portable 시험과 Windows 빌드·NTFS·설치·WPF 검증 및 배포 ZIP.
+- .github/workflows/build.yml: .NET SDK에 의존하지 않는 Framework 빌드·44개 시험·디자인 시점 평가·NTFS·설치·WPF 검증 및 배포 ZIP.
 - licenses: 실제 패키지의 라이선스 고지와 버전 목록.
 
 ## 삭제와 복구

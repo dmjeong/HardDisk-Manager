@@ -1,7 +1,24 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net48</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <ProjectGuid>{757AED93-A097-4A50-8DA1-07AB7CE82975}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ExplorerManager.Service</RootNamespace>
+    <AssemblyName>ExplorerManager.Service</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+  </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../ExplorerManager.Infrastructure/ExplorerManager.Infrastructure.csproj" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="System.ServiceProcess" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ExplorerManager.Application\ExplorerManager.Application.csproj"><Project>{F6924EE7-A97D-472B-95FF-CBD3E36CE78C}</Project><Name>ExplorerManager.Application</Name></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.Contracts\ExplorerManager.Contracts.csproj"><Project>{C1C0C0C5-5F70-4695-AE7F-F118C342CB93}</Project><Name>ExplorerManager.Contracts</Name></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.Infrastructure\ExplorerManager.Infrastructure.csproj"><Project>{A46F0C36-79D0-4B0B-A563-92CE441F5BA8}</Project><Name>ExplorerManager.Infrastructure</Name></ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
