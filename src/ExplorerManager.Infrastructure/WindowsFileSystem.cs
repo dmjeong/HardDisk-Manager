@@ -390,13 +390,17 @@ namespace ExplorerManager.Infrastructure
             NativeMethods.ApplyDacl(handle, original.Dacl);
             if (!rename) return;
             byte[] name = Encoding.Unicode.GetBytes(NativeMethods.LongPath(target));
-            IntPtr info = Marshal.AllocHGlobal(20 + name.Length);
+            IntPtr info = Marshal.AllocHGlobal(22 + name.Length);
             try
             {
                 for (int i = 0; i < 20; i++) Marshal.WriteByte(info, i, 0);
                 Marshal.WriteIntPtr(info, 8, IntPtr.Zero); Marshal.WriteInt32(info, 16, name.Length);
                 Marshal.Copy(name, 0, IntPtr.Add(info, 20), name.Length);
-                NativeMethods.Check(NativeMethods.SetFileInformationByHandle(handle, 3, info, (uint)(20 + name.Length)));
+                Marshal.WriteInt16(info, 20 + name.Length, 0);
+                NativeMethods.Check(NativeMethods.SetFileInformationByHandle(handle, 3, info, (uint)(22 + name.Length)));
+                string actual = NativeMethods.FinalPath(handle);
+                if (!string.Equals(actual, PathGuard.Normalize(target), StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("복구 출력 경로 불일치: expected=" + target + "; actual=" + actual);
             }
             finally { Marshal.FreeHGlobal(info); }
         }

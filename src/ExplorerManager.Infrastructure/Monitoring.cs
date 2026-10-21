@@ -72,6 +72,12 @@ namespace ExplorerManager.Infrastructure
         }
         private void Evaluate(List<Metric> samples, DateTime now, AppSettings settings)
         {
+            foreach (var queue in samples.Where(m => m.Name == "Queue" && m.Quality == "Valid").ToList())
+            {
+                var io = samples.Where(m => m.Entity == queue.Entity && (m.Name == "ReadBytes" || m.Name == "WriteBytes") && m.Quality == "Valid").ToList();
+                if (io.Count == 2) samples.Add(new Metric { Entity = queue.Entity, Name = "StalledIO",
+                    Value = queue.Value > 0 && io.All(m => m.Value == 0) ? 1 : 0, Unit = "flag", Provider = "DerivedPDH", Detail = "미완료 큐가 있으나 읽기/쓰기 완료 처리량이 0" });
+            }
             var cpu = samples.FirstOrDefault(m => m.Name == "CPU" && m.Quality == "Valid")?.Value;
             var ram = samples.FirstOrDefault(m => m.Name == "AvailableRAM" && m.Quality == "Valid")?.Value;
             var cpuTemp = samples.Where(m => m.Entity == "CPU" && m.Name == "Temperature" && m.Quality == "Valid" && m.Value.HasValue).Select(m => m.Value.Value).DefaultIfEmpty(0).Max();
@@ -81,7 +87,8 @@ namespace ExplorerManager.Infrastructure
             foreach (var metric in samples.Where(m => m.Quality == "Valid" && m.Value.HasValue))
             {
                 bool bad = false; string severity = "Warning";
-                if (metric.Name == "ReadLatency" || metric.Name == "WriteLatency")
+                if (metric.Name == "StalledIO") { bad = metric.Value > 0; severity = "Critical"; }
+                else if (metric.Name == "ReadLatency" || metric.Name == "WriteLatency")
                 {
                     string activity = metric.Name == "ReadLatency" ? "Reads" : "Writes";
                     bool io = samples.Any(m => m.Entity == metric.Entity && m.Name == activity && m.Value > 0 && m.Quality == "Valid");

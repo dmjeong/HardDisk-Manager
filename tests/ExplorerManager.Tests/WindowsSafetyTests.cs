@@ -12,6 +12,7 @@ using ExplorerManager.Domain;
 using ExplorerManager.Infrastructure;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using Microsoft.Win32.SafeHandles;
 
 namespace ExplorerManager.Tests
 {
@@ -19,6 +20,8 @@ namespace ExplorerManager.Tests
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool CreateHardLinkW(string name, string existing, IntPtr security);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
         [WindowsFact] public async Task NativeLockedFileIsSkippedWithAlert()
         {
             using (var f = new NativeFixture())
@@ -37,13 +40,16 @@ namespace ExplorerManager.Tests
             using (var f = new NativeFixture())
             {
                 string ads = f.OldFile("ads.bin");
-                File.WriteAllText(ads + ":Zone.Identifier", "test");
+                using (var stream = new FileStream(CreateFileW(ads + ":Zone.Identifier", 0x40000000, 0, IntPtr.Zero, 2, 0x80, IntPtr.Zero), FileAccess.Write))
+                    stream.Write(new byte[] { 1, 2, 3, 4 }, 0, 4);
+                File.SetLastWriteTimeUtc(ads, DateTime.UtcNow.AddDays(-60));
                 string hard = f.OldFile("hard.bin");
                 string outside = Path.Combine(f.Base, "other-link");
                 Assert.True(CreateHardLinkW(outside, hard, IntPtr.Zero));
                 var run = await f.Engine.RunAsync(f.Policy, false, "test", CancellationToken.None);
                 Assert.Equal(0, run.DeletedFiles); Assert.True(File.Exists(ads)); Assert.True(File.Exists(hard));
-                Assert.Equal("test", File.ReadAllText(ads + ":Zone.Identifier"));
+                using (var stream = new FileStream(CreateFileW(ads + ":Zone.Identifier", 0x80000000, 7, IntPtr.Zero, 3, 0x80, IntPtr.Zero), FileAccess.Read))
+                    Assert.Equal(4, stream.Length);
             }
         }
         [WindowsFact] public async Task JunctionDoesNotEscapeManagedRoot()

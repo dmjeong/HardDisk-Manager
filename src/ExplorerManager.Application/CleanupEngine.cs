@@ -38,6 +38,7 @@ namespace ExplorerManager.Application
                 run.State = preview ? "Preview" : "Deleting"; _journal.SaveRun(run);
                 var deleteStarted = _clock.UtcNow;
                 int attempted = 0;
+                long requestedDeleteBytes = 0;
                 while (true)
                 {
                     cancellation.ThrowIfCancellationRequested();
@@ -58,7 +59,7 @@ namespace ExplorerManager.Application
                     if (!PolicyRules.IsExpired(expected, policy, run.CutoffUtc) || _journal.IsProtected(expected, _clock.UtcNow))
                     { Skip(item, run, "보관 기간 또는 복구 보호 대상"); continue; }
                     if (!_cache.CanFit(expected)) { Skip(item, run, "CacheTooSmall"); continue; }
-                    if (expected.Length > policy.MaxDeleteBytes - run.DeletedBytes) { Skip(item, run, "BatchByteLimit"); continue; }
+                    if (expected.Length > policy.MaxDeleteBytes - requestedDeleteBytes) { Skip(item, run, "BatchByteLimit"); continue; }
                     RecoveryInfo cached = null;
                     bool requested = false;
                     try
@@ -76,6 +77,7 @@ namespace ExplorerManager.Application
                             { _cache.Remove(cached.Id, "Cancelled"); cached = null; Skip(item, run, "조건 변경 또는 목표 달성"); continue; }
                             item.FreeBefore = immediatelyBefore.FreeBytes;
                             requested = true;
+                            requestedDeleteBytes += item.Bytes;
                             file.MarkForDeletion();
                         }
                         bool absent = _files.IsAbsent(item.File);
