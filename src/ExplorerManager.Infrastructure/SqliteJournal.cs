@@ -216,10 +216,15 @@ GROUP BY folder,runid ORDER BY max(utc) DESC LIMIT 100 OFFSET $1", "%" + escaped
         public void SaveMetrics(IEnumerable<Metric> samples)
         {
             lock (_sync)
+            using (var tx = _db.BeginTransaction())
+            {
                 foreach (var m in samples.Where(x => x.Value.HasValue && x.Quality == "Valid"))
-                    Exec(@"INSERT INTO metrics VALUES($0,$1,$2,$3,$4,$4,$4,1)
+                    using (var c = Command(@"INSERT INTO metrics VALUES($0,$1,$2,$3,$4,$4,$4,1)
 ON CONFLICT(bucket,entity,name) DO UPDATE SET sum=sum+excluded.sum,min=min(min,excluded.min),max=max(max,excluded.max),count=count+1",
-                        m.Utc.ToString("yyyy-MM-ddTHH:mm:00Z"), m.Entity, m.Name, m.Unit, m.Value.Value);
+                        m.Utc.ToString("yyyy-MM-ddTHH:mm:00Z"), m.Entity, m.Name, m.Unit, m.Value.Value))
+                    { c.Transaction = tx; c.ExecuteNonQuery(); }
+                tx.Commit();
+            }
         }
         public void Maintain(AppSettings settings)
         {
