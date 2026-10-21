@@ -19,7 +19,7 @@ namespace ExplorerManager.Infrastructure
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 timeout.CancelAfter(3000);
-                using (var pipe = new NamedPipeClientStream(".", "ExplorerManager.Sensors.v1", PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation))
+                using (var pipe = new NamedPipeClientStream(".", "ExplorerManager.Sensors.v1", PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification))
                 {
                     await pipe.ConnectAsync(1000, timeout.Token).ConfigureAwait(false);
                     using (timeout.Token.Register(() => pipe.Dispose()))

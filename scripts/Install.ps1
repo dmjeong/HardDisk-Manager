@@ -2,17 +2,45 @@
 [CmdletBinding()]
 param([string]$InstallDirectory="$env:ProgramFiles\ExplorerManager", [switch]$NoStartUi, [switch]$NoAutoStart, [switch]$NoHardwareSensors)
 $ErrorActionPreference='Stop'
-function Set-ExplorerService([string]$Name,[string]$Display,[string]$Binary,[string]$Account) {
-    $existing=Get-CimInstance -ClassName Win32_Service -Filter "Name='$Name'"
-    $arguments=@{PathName=$Binary;StartMode='Automatic';StartName=$Account;StartPassword='';DesktopInteract=$false}
-    if ($existing) {
-        $result=Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments $arguments
-    } else {
-        $arguments.Name=$Name;$arguments.DisplayName=$Display
-        $arguments.ServiceType=[byte]16;$arguments.ErrorControl=[byte]1
-        $result=Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments $arguments
+if (-not ('ExplorerManagerInstaller.ServiceConfig' -as [type])) {
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+namespace ExplorerManagerInstaller {
+ public static class ServiceConfig {
+  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr OpenSCManagerW(string machine,string database,uint access);
+  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr OpenServiceW(IntPtr manager,string name,uint access);
+  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CreateServiceW(IntPtr manager,string name,string display,uint access,uint type,uint start,uint error,string binary,string group,IntPtr tag,string dependencies,string account,string password);
+  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ChangeServiceConfigW(IntPtr service,uint type,uint start,uint error,string binary,string group,IntPtr tag,string dependencies,string account,string password,string display);
+  [DllImport("advapi32.dll",SetLastError=true)] static extern bool DeleteService(IntPtr service);
+  [DllImport("advapi32.dll")] static extern bool CloseServiceHandle(IntPtr handle);
+  public static void Apply(string name,string display,string binary,string account) {
+   IntPtr manager=OpenSCManagerW(null,null,3);
+   if(manager==IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+   try {
+    bool created=false;
+    IntPtr service=OpenServiceW(manager,name,0x10006);
+    if(service==IntPtr.Zero) {
+     int code=Marshal.GetLastWin32Error(); if(code!=1060) throw new Win32Exception(code);
+     // Create stopped/manual, then atomically select the account and automatic start.
+     service=CreateServiceW(manager,name,display,0x10006,16,3,1,binary,null,IntPtr.Zero,null,null,null);
+     if(service==IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+     created=true;
     }
-    if ($result.ReturnValue -ne 0) { throw "Service configuration failed for $Name : $($result.ReturnValue)" }
+    try {
+     if(!ChangeServiceConfigW(service,uint.MaxValue,2,uint.MaxValue,binary,null,IntPtr.Zero,null,account=="LocalSystem"?null:account,"",display))
+      throw new Win32Exception(Marshal.GetLastWin32Error());
+    } catch { if(created) DeleteService(service); throw; }
+    finally { CloseServiceHandle(service); }
+   } finally { CloseServiceHandle(manager); }
+  }
+ }
+}
+'@
+}
+function Set-ExplorerService([string]$Name,[string]$Display,[string]$Binary,[string]$Account) {
+    [ExplorerManagerInstaller.ServiceConfig]::Apply($Name,$Display,$Binary,$Account)
 }
 $source = Join-Path $PSScriptRoot 'app'
 if (-not (Test-Path "$source/Service/ExplorerManager.Service.exe")) { throw 'Extract the complete build package, then run Install.ps1 next to app/.' }

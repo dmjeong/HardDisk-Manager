@@ -78,7 +78,7 @@ namespace ExplorerManager.Presentation
         }
         private AsyncCommand Command(Func<Task> action) => new AsyncCommand(action, Error);
         private void Error(Exception ex) { Message = ex.Message; _ui.Notify("Explorer Manager", ex.Message); }
-        public ObservableCollection<VolumeStatus> Volumes { get; } = new ObservableCollection<VolumeStatus>();
+        public ObservableCollection<VolumeRow> Volumes { get; } = new ObservableCollection<VolumeRow>();
         public ObservableCollection<PolicyEditor> Policies { get; } = new ObservableCollection<PolicyEditor>();
         public ObservableCollection<RunRecord> Runs { get; } = new ObservableCollection<RunRecord>();
         public ObservableCollection<Metric> Metrics { get; } = new ObservableCollection<Metric>();
@@ -146,7 +146,7 @@ namespace ExplorerManager.Presentation
                 Status = (state.Paused ? "신규 삭제 일시정지" : "서비스 연결됨") + " · " + state.Health + " · " + state.Utc.ToLocalTime().ToString("HH:mm:ss");
                 CacheText = (state.CacheUsed / 1048576.0).ToString("F1") + " MiB / " + (state.CacheCapacity / 1073741824.0).ToString("F2") + " GiB";
                 string alertId = SelectedAlert?.Id, recoveryId = SelectedRecovery?.Id, recoveryFolder = RecoveryFolder;
-                Replace(Volumes, state.Volumes); Replace(Runs, state.Runs); Replace(Metrics, state.Metrics); Replace(Alerts, state.Alerts);
+                SyncVolumes(state); Replace(Runs, state.Runs); Replace(Metrics, state.Metrics); Replace(Alerts, state.Alerts);
                 SelectedAlert = Alerts.FirstOrDefault(x => x.Id == alertId);
                 if (discardPolicyChanges || SelectedPolicy == null || !SelectedPolicy.IsDirty)
                 {
@@ -236,5 +236,18 @@ namespace ExplorerManager.Presentation
         { target.Clear(); foreach (var value in source) target.Add(value); }
         private static void Append(ObservableCollection<double> values, double? value)
         { values.Add(value ?? double.NaN); while (values.Count > 120) values.RemoveAt(0); }
+        private void SyncVolumes(Dashboard state)
+        {
+            var values = state.Volumes.Where(v => !string.IsNullOrWhiteSpace(v.Id)).ToList();
+            var registered = state.Policies.Select(p => p.VolumeId).Concat(new[] { SelectedPolicy?.VolumeId }).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct();
+            foreach (string id in registered)
+                if (!values.Any(v => v.Id == id)) values.Add(new VolumeStatus { Id = id, Mount = "등록된 볼륨", State = "Offline / IdentityMismatch" });
+            foreach (var old in Volumes.Where(v => !values.Any(n => n.Id == v.Id)).ToList()) Volumes.Remove(old);
+            foreach (var value in values)
+            {
+                var row = Volumes.FirstOrDefault(v => v.Id == value.Id);
+                if (row == null) Volumes.Add(new VolumeRow(value)); else row.Apply(value);
+            }
+        }
     }
 }

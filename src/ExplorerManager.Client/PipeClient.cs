@@ -19,9 +19,19 @@ namespace ExplorerManager.Client
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
             {
                 timeout.CancelAfter(TimeSpan.FromSeconds(30));
-                using (var pipe = new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation))
+                uint expectedPid = EndpointVerifier.ServicePid();
+                bool impersonation = command == "PrepareUnlock" || command == "ValidateUnlock";
+                using (var identityProbe = impersonation ? new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification) : null)
+                using (var pipe = new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous,
+                    impersonation ? TokenImpersonationLevel.Impersonation : TokenImpersonationLevel.Identification))
                 {
+                    if (identityProbe != null)
+                    {
+                        await identityProbe.ConnectAsync(3000, timeout.Token).ConfigureAwait(false);
+                        EndpointVerifier.Verify(identityProbe, expectedPid);
+                    }
                     await pipe.ConnectAsync(3000, timeout.Token).ConfigureAwait(false);
+                    EndpointVerifier.Verify(pipe, expectedPid);
                     byte[] payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(request, Protocol.Json));
                     if (payload.Length > Protocol.MaxFrameBytes) throw new InvalidOperationException("요청 크기 제한을 초과했습니다.");
                     using (timeout.Token.Register(() => pipe.Dispose()))

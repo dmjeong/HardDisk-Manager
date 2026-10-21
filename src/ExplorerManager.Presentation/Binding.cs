@@ -48,6 +48,24 @@ namespace ExplorerManager.Presentation
         public void Execute(object parameter) => _action();
         public event EventHandler CanExecuteChanged { add { } remove { } }
     }
+    public sealed class VolumeRow : ObservableObject
+    {
+        private VolumeStatus _value;
+        public VolumeRow(VolumeStatus value) { _value = value; }
+        public string Id => _value.Id;
+        public string Mount => _value.Mount;
+        public string Label => _value.Label;
+        public string FileSystem => _value.FileSystem;
+        public string State => _value.State;
+        public long FreeBytes => _value.FreeBytes;
+        public double UsedPercent => _value.UsedPercent;
+        public string Summary => _value.State == "Ready" ? _value.Summary : _value.Mount + " · " + _value.State;
+        public void Apply(VolumeStatus value)
+        {
+            _value = value;
+            foreach (string name in new[] { nameof(Mount), nameof(Label), nameof(FileSystem), nameof(State), nameof(FreeBytes), nameof(UsedPercent), nameof(Summary) }) Changed(name);
+        }
+    }
     public sealed class LockAlertViewModel
     {
         public LockAlertViewModel(AlertRecord alert)

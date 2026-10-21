@@ -14,7 +14,7 @@ namespace ExplorerManager.Presentation
         public string Id => _policy.Id;
         public int Version => _policy.Version;
         public string Name { get => _policy.Name; set { _policy.Name = value; Edit(); } }
-        public string VolumeId { get => _policy.VolumeId; set { _policy.VolumeId = value; Edit(); } }
+        public string VolumeId { get => _policy.VolumeId; set { if (_policy.VolumeId != value) { _policy.VolumeId = value; Edit(); } } }
         public bool Enabled { get => _policy.Enabled; set { _policy.Enabled = value; Edit(); } }
         public ThresholdMode Mode { get => _policy.ThresholdMode; set { _policy.ThresholdMode = value; Edit(); } }
         public AgeBasis AgeBasis { get => _policy.AgeBasis; set { _policy.AgeBasis = value; Edit(); } }

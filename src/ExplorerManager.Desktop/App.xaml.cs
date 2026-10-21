@@ -34,6 +34,7 @@ namespace ExplorerManager.Desktop
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _timer.Tick += async (s, a) => await vm.RefreshAsync();
             _timer.Start();
+            _ = vm.RefreshAsync();
             bool smoke = e.Args.Contains("--smoke");
             if (smoke)
             {
@@ -47,6 +48,8 @@ namespace ExplorerManager.Desktop
                     finish.Stop();
                     try
                     {
+                        if (!vm.Status.StartsWith("서비스 연결됨", StringComparison.Ordinal) && !vm.Status.StartsWith("신규 삭제", StringComparison.Ordinal))
+                            throw new InvalidOperationException("WPF 서비스 연결 실패: " + vm.Status + " / " + vm.Message);
                         int at = Array.IndexOf(e.Args, "--screenshot");
                         if (at >= 0 && at + 1 < e.Args.Length)
                         {
