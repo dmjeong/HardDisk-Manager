@@ -25,9 +25,16 @@ namespace ExplorerManager.Presentation
         private string _selectedDisk;
         private int _historyOffset;
         private bool _more;
+        private bool _isServiceConnected, _isPaused, _connectionFailed;
+        private DateTime _lastUpdatedUtc;
+        private string _health;
+        private long _cacheUsed, _cacheCapacity;
+        private int _enabledPolicyCount;
         public MainViewModel(IExplorerClient client, IUiServices ui)
         {
             _client = client; _ui = ui;
+            Volumes.CollectionChanged += (sender, args) => { Changed(nameof(VolumeCountText)); Changed(nameof(TotalFreeText)); };
+            Alerts.CollectionChanged += (sender, args) => Changed(nameof(AlertCountText));
             RefreshCommand = Command(async () => { await RefreshAsync(); await LoadHistoryAsync(); });
             NewCommand = Command(() => { SelectedPolicy = new PolicyEditor(new DrivePolicy { VolumeId = Volumes.FirstOrDefault()?.Id ?? "" }); Policies.Add(SelectedPolicy); return Task.CompletedTask; });
             SaveCommand = Command(SavePolicyAsync);
@@ -94,13 +101,44 @@ namespace ExplorerManager.Presentation
         public string SelectedDisk
         {
             get => _selectedDisk;
-            set { if (Set(ref _selectedDisk, value)) { ReadSeries.Clear(); WriteSeries.Clear(); LatencySeries.Clear(); } }
+            set
+            {
+                if (Set(ref _selectedDisk, value))
+                {
+                    ReadSeries.Clear(); WriteSeries.Clear(); LatencySeries.Clear();
+                    NotifyDiskMetrics();
+                }
+            }
         }
         public ThresholdMode[] Modes => (ThresholdMode[])Enum.GetValues(typeof(ThresholdMode));
         public AgeBasis[] AgeOptions => (AgeBasis[])Enum.GetValues(typeof(AgeBasis));
         public string Message { get => _message; set => Set(ref _message, value); }
         public string Status { get => _status; private set => Set(ref _status, value); }
         public string CacheText { get => _cacheText; private set => Set(ref _cacheText, value); }
+        public string VolumeCountText => Volumes.Count + "개";
+        public string TotalFreeText => Volumes.Any(v => v.HasCapacity) ? DisplayText.Bytes(Volumes.Where(v => v.HasCapacity).Sum(v => (double)v.FreeBytes)) : "측정 대기";
+        public string EnabledPolicyCountText => _enabledPolicyCount + "개";
+        public string AlertCountText => Alerts.Count(a => !a.Acknowledged) + "건";
+        public double CachePercent => _cacheCapacity > 0 ? Math.Max(0, Math.Min(100, _cacheUsed * 100.0 / _cacheCapacity)) : 0;
+        public string CacheSummary => _cacheCapacity > 0 ? DisplayText.Bytes(_cacheUsed) + " / " + DisplayText.Bytes(_cacheCapacity) : "측정 대기";
+        public string CpuText => MetricText("CPU", "CPU");
+        public string CpuTemperatureText => MetricText("CPU", "Temperature", true);
+        public string ReadRateText => MetricText(SelectedDisk, "ReadBytes");
+        public string WriteRateText => MetricText(SelectedDisk, "WriteBytes");
+        public string LatencyText
+        {
+            get
+            {
+                if (!IsServiceConnected || string.IsNullOrWhiteSpace(SelectedDisk)) return "측정 대기";
+                var values = Metrics.Where(x => x.Entity == SelectedDisk && (x.Name == "ReadLatency" || x.Name == "WriteLatency")).ToList();
+                return DisplayText.MetricValue(values.Where(DisplayText.HasValue).OrderByDescending(x => x.Value).FirstOrDefault() ?? values.FirstOrDefault());
+            }
+        }
+        public bool IsServiceConnected => _isServiceConnected;
+        public bool IsPaused => _isPaused;
+        public string ServiceText => !IsServiceConnected ? (_connectionFailed ? "서비스 연결 끊김" : "서비스 연결 대기") : IsPaused ? "자동 정리 일시정지" : "백그라운드 서비스 연결됨";
+        public string HealthText => !IsServiceConnected ? "상태 확인 필요" : DisplayText.State(_health);
+        public string LastUpdatedText => _lastUpdatedUtc == default(DateTime) ? "업데이트 대기" : _lastUpdatedUtc.ToLocalTime().ToString("HH:mm:ss") + " 업데이트";
         public string Filter { get => _filter; set => Set(ref _filter, value); }
         public string RecoveryFolder { get => _folder; set => Set(ref _folder, value); }
         public string AllowedApps { get => _allowedApps; set => Set(ref _allowedApps, value); }
@@ -143,6 +181,9 @@ namespace ExplorerManager.Presentation
             try
             {
                 var state = await _client.SendAsync<Dashboard>("Dashboard");
+                _isServiceConnected = true; _connectionFailed = false; _isPaused = state.Paused; _health = state.Health;
+                _lastUpdatedUtc = state.Utc; _cacheUsed = state.CacheUsed; _cacheCapacity = state.CacheCapacity;
+                _enabledPolicyCount = state.Policies.Count(x => x.Enabled);
                 Status = (state.Paused ? "신규 삭제 일시정지" : "서비스 연결됨") + " · " + state.Health + " · " + state.Utc.ToLocalTime().ToString("HH:mm:ss");
                 CacheText = (state.CacheUsed / 1048576.0).ToString("F1") + " MiB / " + (state.CacheCapacity / 1073741824.0).ToString("F2") + " GiB";
                 string alertId = SelectedAlert?.Id, recoveryId = SelectedRecovery?.Id, recoveryFolder = RecoveryFolder;
@@ -156,15 +197,15 @@ namespace ExplorerManager.Presentation
                 }
                 Replace(Recovery, await _client.SendAsync<RecoveryInfo[]>("Recovery"));
                 SelectedRecovery = Recovery.FirstOrDefault(x => x.Id == recoveryId); RecoveryFolder = recoveryFolder;
-                var cpu = state.Metrics.FirstOrDefault(x => x.Name == "CPU" && x.Quality == "Valid")?.Value;
-                if (cpu.HasValue) { CpuSeries.Add(cpu.Value); while (CpuSeries.Count > 120) CpuSeries.RemoveAt(0); }
+                Append(CpuSeries, state.Metrics.FirstOrDefault(x => x.Entity == "CPU" && x.Name == "CPU" && DisplayText.HasValue(x))?.Value);
                 string disk = SelectedDisk;
                 var entities = state.Metrics.Where(x => x.Entity != null && x.Entity.StartsWith("Disk", StringComparison.Ordinal)).Select(x => x.Entity).Distinct().OrderBy(x => x).ToList();
                 if (!DiskEntities.SequenceEqual(entities))
                 { Replace(DiskEntities, entities); SelectedDisk = entities.Contains(disk) ? disk : entities.FirstOrDefault(); }
-                Append(ReadSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "ReadBytes" && x.Quality == "Valid")?.Value);
-                Append(WriteSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "WriteBytes" && x.Quality == "Valid")?.Value);
-                Append(LatencySeries, state.Metrics.Where(x => x.Entity == SelectedDisk && (x.Name == "ReadLatency" || x.Name == "WriteLatency") && x.Quality == "Valid" && x.Value.HasValue).Select(x => x.Value).DefaultIfEmpty(null).Max());
+                Append(ReadSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "ReadBytes" && DisplayText.HasValue(x))?.Value);
+                Append(WriteSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "WriteBytes" && DisplayText.HasValue(x))?.Value);
+                Append(LatencySeries, state.Metrics.Where(x => x.Entity == SelectedDisk && (x.Name == "ReadLatency" || x.Name == "WriteLatency") && DisplayText.HasValue(x)).Select(x => x.Value).DefaultIfEmpty(null).Max());
+                NotifyDashboard();
                 if (!_historyLoaded)
                 {
                     Settings = await _client.SendAsync<AppSettings>("Settings"); AllowedApps = string.Join(Environment.NewLine, Settings.AllowedProcessNames);
@@ -184,7 +225,14 @@ namespace ExplorerManager.Presentation
                     finally { _showingAlarm = false; }
                 }
             }
-            catch (Exception ex) { Status = "서비스 연결/조회 실패 · 관리자 실행과 서비스 상태를 확인하세요."; Message = ex.Message; }
+            catch (Exception ex)
+            {
+                _isServiceConnected = false; _connectionFailed = true;
+                Append(CpuSeries, null); Append(ReadSeries, null); Append(WriteSeries, null); Append(LatencySeries, null);
+                Metrics.Clear();
+                Status = "서비스 연결/조회 실패 · 관리자 실행과 서비스 상태를 확인하세요."; Message = ex.Message;
+                NotifyDashboard();
+            }
             finally { _refreshing = false; }
         }
         private async Task SavePolicyAsync()
@@ -236,6 +284,25 @@ namespace ExplorerManager.Presentation
         { target.Clear(); foreach (var value in source) target.Add(value); }
         private static void Append(ObservableCollection<double> values, double? value)
         { values.Add(value ?? double.NaN); while (values.Count > 120) values.RemoveAt(0); }
+        private string MetricText(string entity, string name, bool highest = false)
+        {
+            if (!IsServiceConnected || string.IsNullOrWhiteSpace(entity)) return "측정 대기";
+            var values = Metrics.Where(x => x.Entity == entity && x.Name == name).ToList();
+            var valid = values.Where(DisplayText.HasValue);
+            var selected = highest ? valid.OrderByDescending(x => x.Value).FirstOrDefault() : valid.OrderByDescending(x => x.Utc).FirstOrDefault();
+            return DisplayText.MetricValue(selected ?? values.OrderByDescending(x => x.Utc).FirstOrDefault());
+        }
+        private void NotifyDiskMetrics()
+        {
+            Changed(nameof(ReadRateText)); Changed(nameof(WriteRateText)); Changed(nameof(LatencyText));
+        }
+        private void NotifyDashboard()
+        {
+            foreach (string name in new[] { nameof(VolumeCountText), nameof(TotalFreeText), nameof(EnabledPolicyCountText), nameof(AlertCountText),
+                nameof(CachePercent), nameof(CacheSummary), nameof(CpuText), nameof(CpuTemperatureText), nameof(IsServiceConnected), nameof(IsPaused),
+                nameof(ServiceText), nameof(HealthText), nameof(LastUpdatedText) }) Changed(name);
+            NotifyDiskMetrics();
+        }
         private void SyncVolumes(Dashboard state)
         {
             var values = state.Volumes.Where(v => !string.IsNullOrWhiteSpace(v.Id)).ToList();

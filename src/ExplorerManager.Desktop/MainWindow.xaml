@@ -3,173 +3,194 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:ExplorerManager.Desktop"
  Title="Explorer Manager" Style="{StaticResource {x:Type Window}}" Width="1440" Height="920" MinWidth="1120" MinHeight="720" WindowStartupLocation="CenterScreen">
- <Grid Margin="20">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <DockPanel Margin="0,0,0,12">
-   <StackPanel DockPanel.Dock="Left"><TextBlock Text="EXPLORER MANAGER" FontSize="27" FontWeight="Bold"/><TextBlock Text="드라이브 정리와 복구 · Windows Service" Foreground="#90A8C1" Margin="0,4,0,0"/></StackPanel>
-   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-    <Button Content="관리자 실행" Command="{Binding ElevateCommand}"/>
-    <Button Content="새로 고침" Command="{Binding RefreshCommand}"/>
-    <Button Content="전체 일시정지" Command="{Binding PauseCommand}" Style="{StaticResource DangerButton}"/>
-    <Button Content="재개" Command="{Binding ResumeCommand}"/>
-   </StackPanel>
-  </DockPanel>
-  <Border Grid.Row="1" Background="#172A40" CornerRadius="7" Padding="13" Margin="0,0,0,12">
-   <DockPanel><TextBlock Text="{Binding CacheText, StringFormat=복구 캐시  {0}}" DockPanel.Dock="Right"/><TextBlock Text="{Binding Status}"/></DockPanel>
-  </Border>
-  <TabControl x:Name="Sections" Grid.Row="2">
-   <TabItem Header="대시보드">
-    <Grid><Grid.RowDefinitions><RowDefinition Height="150"/><RowDefinition Height="150"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-     <DataGrid ItemsSource="{Binding Volumes}"><DataGrid.Columns>
-      <DataGridTextColumn Header="드라이브" Binding="{Binding Mount}" Width="100"/><DataGridTextColumn Header="이름" Binding="{Binding Label}" Width="*"/>
-      <DataGridTextColumn Header="사용률 %" Binding="{Binding UsedPercent,StringFormat=F1}" Width="110"/><DataGridTextColumn Header="여유 바이트" Binding="{Binding FreeBytes,StringFormat=N0}" Width="170"/>
-      <DataGridTextColumn Header="파일 시스템" Binding="{Binding FileSystem}" Width="120"/><DataGridTextColumn Header="상태" Binding="{Binding State}" Width="180"/>
-     </DataGrid.Columns></DataGrid>
-     <GroupBox Grid.Row="1" Header="CPU 사용률 · 최근 120개 표본"><local:Sparkline Values="{Binding CpuSeries}" /></GroupBox>
-     <DockPanel Grid.Row="2" Margin="0,12,0,8"><TextBlock Text="정리 실행 이력" FontSize="17" FontWeight="Bold"/><Button DockPanel.Dock="Right" Content="현재 작업 취소" Command="{Binding CancelCommand}" HorizontalAlignment="Right"/></DockPanel>
-     <DataGrid Grid.Row="3" ItemsSource="{Binding Runs}"><DataGrid.Columns>
-      <DataGridTextColumn Header="시작 UTC" Binding="{Binding StartedUtc,StringFormat=yyyy-MM-dd HH:mm:ss}" Width="160"/><DataGridTextColumn Header="정책" Binding="{Binding PolicyName}" Width="140"/>
-      <DataGridCheckBoxColumn Header="미리보기" Binding="{Binding DryRun}" Width="70"/><DataGridTextColumn Header="상태" Binding="{Binding State}" Width="170"/>
-      <DataGridTextColumn Header="후보" Binding="{Binding Candidates}" Width="70"/><DataGridTextColumn Header="파일/폴더 삭제" Binding="{Binding DeletedFiles}" Width="100"/>
-      <DataGridTextColumn Header="폴더 수" Binding="{Binding DeletedDirectories}" Width="70"/><DataGridTextColumn Header="삭제 바이트" Binding="{Binding DeletedBytes,StringFormat=N0}" Width="130"/>
-      <DataGridTextColumn Header="여유 공간 순변화" Binding="{Binding ObservedFreeDelta,StringFormat=N0}" Width="140"/><DataGridTextColumn Header="상세" Binding="{Binding Detail}" Width="*"/>
-     </DataGrid.Columns></DataGrid>
-    </Grid>
-   </TabItem>
-   <TabItem Header="드라이브 정책">
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-     <DockPanel Margin="0,0,14,0"><Button Content="+ 새 정책" Command="{Binding NewCommand}" DockPanel.Dock="Top"/>
-      <ListBox ItemsSource="{Binding Policies}" SelectedItem="{Binding SelectedPolicy}" DisplayMemberPath="Name" Background="#172A40" Foreground="White" Padding="8"/>
-     </DockPanel>
-     <DockPanel Grid.Column="1">
-      <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
-       <Button Content="정책 저장" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="미리보기" Command="{Binding PreviewCommand}"/>
-       <Button Content="지금 정리" Command="{Binding RunCommand}"/><Button Content="정책 삭제" Command="{Binding DeleteCommand}" Style="{StaticResource DangerButton}"/>
-      </StackPanel>
-      <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-       <TextBlock Text="저장 → 미리보기 → 자동 삭제 활성화" FontSize="18" FontWeight="Bold" Margin="4,0,0,12"/>
-       <TextBlock Text="사용량 기준은 볼륨 전체에 적용하고, 삭제는 등록한 폴더 내부로 제한합니다." Foreground="#A4BAD0" Margin="4,0,0,8"/>
-       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="정책 이름"/><TextBox Text="{Binding SelectedPolicy.Name,UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="볼륨"/><ComboBox ItemsSource="{Binding Volumes}" DisplayMemberPath="Summary" SelectedValuePath="Id" SelectedValue="{Binding SelectedPolicy.VolumeId}"/></StackPanel>
-       </Grid>
-       <TextBlock Text="관리 루트 · 한 줄에 한 경로" Margin="3,12,0,0"/><Button Content="폴더 추가…" Command="{Binding AddRootCommand}" HorizontalAlignment="Left"/>
-       <TextBox Text="{Binding SelectedPolicy.Roots,UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="88" VerticalScrollBarVisibility="Auto"/>
-       <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="용량 기준"/><ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedPolicy.Mode}"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="시작값 (% 또는 bytes)"/><TextBox Text="{Binding SelectedPolicy.Start,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="2"><TextBlock Text="종료값 (% 또는 bytes)"/><TextBox Text="{Binding SelectedPolicy.Stop,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="3"><TextBlock Text="보관 기간 (일)"/><TextBox Text="{Binding SelectedPolicy.RetentionDays,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
-       </Grid>
-       <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="기간 판단 시각"/><ComboBox ItemsSource="{Binding AgeOptions}" SelectedItem="{Binding SelectedPolicy.AgeBasis}"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="점검 주기 (초)"/><TextBox Text="{Binding SelectedPolicy.Interval,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="2"><TextBlock Text="재실행 대기 (초)"/><TextBox Text="{Binding SelectedPolicy.Cooldown,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="3"><TextBlock Text="복구 보호 (시간)"/><TextBox Text="{Binding SelectedPolicy.ProtectionHours,ValidatesOnExceptions=True}"/></StackPanel>
-       </Grid>
-       <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="1회 삭제 상한 (GiB)"/><TextBox Text="{Binding SelectedPolicy.DeleteLimitGiB,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="읽기 상한 (MiB/s)"/><TextBox Text="{Binding SelectedPolicy.ReadMiB,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="2"><TextBlock Text="스캔 제한 (초)"/><TextBox Text="{Binding SelectedPolicy.ScanLimit,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="3"><TextBlock Text="삭제 제한 (초)"/><TextBox Text="{Binding SelectedPolicy.RunLimit,ValidatesOnExceptions=True}"/></StackPanel>
-       </Grid>
-       <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="시작 시각 (0~23)"/><TextBox Text="{Binding SelectedPolicy.StartHour,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="종료 시각 (1~24)"/><TextBox Text="{Binding SelectedPolicy.EndHour,ValidatesOnExceptions=True}"/></StackPanel>
-        <StackPanel Grid.Column="2"><TextBlock Text="1회 처리 항목 상한"/><TextBox Text="{Binding SelectedPolicy.ItemLimit,ValidatesOnExceptions=True}"/></StackPanel>
-       </Grid>
-       <TextBlock Text="제외 경로 · 한 줄에 한 경로" Margin="3,12,0,0"/><TextBox Text="{Binding SelectedPolicy.Excluded}" AcceptsReturn="True" Height="65"/>
-       <TextBlock Text="제외 확장자 · 쉼표로 구분"/><TextBox Text="{Binding SelectedPolicy.Extensions}"/>
-       <CheckBox Content="이 정책의 자동 삭제 활성화" IsChecked="{Binding SelectedPolicy.Enabled}"/>
-       <TextBlock Text="캐시보다 큰 파일은 건너뜁니다. 링크·특수 속성·최근 파일·복구 보호 대상은 삭제하지 않습니다." Foreground="#A4BAD0" TextWrapping="Wrap" Margin="4"/>
+ <Window.Resources>
+  <DataTemplate x:Key="EnumTemplate"><TextBlock Text="{Binding Converter={StaticResource EnumLabel}}"/></DataTemplate>
+ </Window.Resources>
+ <TabControl x:Name="Sections" Style="{StaticResource SidebarTabs}">
+  <TabItem Header="개요" Tag="&#xE80F;" ToolTip="드라이브 상태와 정리 작업을 한눈에 확인하세요.">
+   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+    <StackPanel>
+     <UniformGrid Columns="4" Margin="0,0,-12,24">
+      <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="관리 드라이브" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding VolumeCountText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="등록·감지된 볼륨" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
+      <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="전체 여유 공간" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding TotalFreeText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="연결된 볼륨 기준" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
+      <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="활성화된 정책" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding EnabledPolicyCountText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="자동 정리 사용 중" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
+      <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="미확인 알림" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding AlertCountText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="알림 센터에서 확인" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
+     </UniformGrid>
+     <DockPanel Margin="0,0,0,14"><StackPanel DockPanel.Dock="Left"><TextBlock Text="드라이브" Style="{StaticResource SectionTitle}"/><TextBlock Text="볼륨 전체의 용량을 표시합니다. 삭제 범위는 정책에 등록한 폴더로 제한됩니다." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
+     <ItemsControl ItemsSource="{Binding Volumes}" Margin="0,0,-12,12">
+      <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate><DataTemplate>
+       <Border Style="{StaticResource Card}" Margin="0,0,12,12">
+        <StackPanel>
+         <DockPanel Margin="0,0,0,20"><Border DockPanel.Dock="Right" Style="{StaticResource Badge}"><TextBlock Text="{Binding StateText}" FontSize="11"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource WarningBrush}"/><Style.Triggers><DataTrigger Binding="{Binding IsReady}" Value="True"><Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Border><StackPanel Orientation="Horizontal"><Border Background="{StaticResource HoverBrush}" CornerRadius="8" Width="36" Height="36" Margin="0,0,12,0"><TextBlock Text="&#xEDA2;" FontFamily="Segoe MDL2 Assets" FontSize="18" HorizontalAlignment="Center"/></Border><StackPanel><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Text="{Binding FileSystem}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/></StackPanel></StackPanel></DockPanel>
+         <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Right" Text="{Binding UsedPercentText}" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding FreeText,StringFormat=여유 {0}}" FontSize="22" FontWeight="SemiBold"/></DockPanel>
+         <ProgressBar Value="{Binding UsedPercent}" Maximum="100" AutomationProperties.Name="드라이브 사용률"/>
+         <DockPanel Margin="0,10,0,0"><TextBlock Text="{Binding CapacityText,StringFormat=전체 {0}}" DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="11"/><TextBlock Text="{Binding UsedText,StringFormat=사용 {0}}" Style="{StaticResource MutedText}" FontSize="11"/></DockPanel>
+        </StackPanel>
+       </Border>
+      </DataTemplate></ItemsControl.ItemTemplate>
+     </ItemsControl>
+     <Border Style="{StaticResource Card}" Visibility="{Binding Volumes.Count,Converter={StaticResource EmptyVisibility}}" Margin="0,0,0,24"><StackPanel><TextBlock Text="드라이브 정보를 기다리고 있습니다" Style="{StaticResource SectionTitle}"/><TextBlock Text="서비스 연결과 드라이브 연결 상태를 확인하세요." Style="{StaticResource MutedText}"/></StackPanel></Border>
+     <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Border Style="{StaticResource Card}"><StackPanel><DockPanel><TextBlock Text="CPU 사용률" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding CpuText}" HorizontalAlignment="Right" FontSize="18" FontWeight="SemiBold"/></DockPanel><local:Sparkline Values="{Binding CpuSeries}" Unit="%" Maximum="100" Height="112" Margin="0,10,0,0" AutomationProperties.Name="CPU 사용률 추이"/></StackPanel></Border>
+      <Border Grid.Column="2" Style="{StaticResource Card}"><StackPanel><TextBlock Text="복구 캐시" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding CacheSummary}" FontSize="17" FontWeight="SemiBold" Margin="0,14,0,12"/><ProgressBar Value="{Binding CachePercent}" Maximum="100"/><TextBlock Text="최근 삭제본을 RAM에 임시 보관합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,14,0,0"/><TextBlock Text="서비스 재시작 시 보관본이 사라집니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/></StackPanel></Border>
+     </Grid>
+     <DockPanel Margin="0,0,0,12"><Button DockPanel.Dock="Right" Content="현재 작업 취소" Command="{Binding CancelCommand}" Style="{StaticResource GhostButton}"/><StackPanel><TextBlock Text="최근 정리 작업" Style="{StaticResource SectionTitle}"/><TextBlock Text="미리보기 결과와 실제 삭제 내역을 확인하세요." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
+     <Border Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid>
+      <DataGrid ItemsSource="{Binding Runs}" MaxHeight="300"><DataGrid.Columns>
+       <DataGridTextColumn Header="시작 시각" Binding="{Binding StartedUtc,Converter={StaticResource LocalTime}}" Width="136"/>
+       <DataGridTextColumn Header="정책" Binding="{Binding PolicyName}" Width="150"/>
+       <DataGridCheckBoxColumn Header="미리보기" Binding="{Binding DryRun}" Width="74"/>
+       <DataGridTextColumn Header="결과" Binding="{Binding State,Converter={StaticResource State}}" Width="140"/>
+       <DataGridTextColumn Header="파일" Binding="{Binding DeletedFiles,StringFormat=N0}" Width="65"/>
+       <DataGridTextColumn Header="폴더" Binding="{Binding DeletedDirectories,StringFormat=N0}" Width="65"/>
+       <DataGridTextColumn Header="삭제 용량" Binding="{Binding DeletedBytes,Converter={StaticResource Bytes}}" Width="106"/>
+       <DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,Converter={StaticResource Bytes}}" Width="112"/>
+       <DataGridTextColumn Header="상세" Binding="{Binding Detail}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="100"/>
+      </DataGrid.Columns></DataGrid>
+      <StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding Runs.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="아직 정리 작업이 없습니다" HorizontalAlignment="Center"/><TextBlock Text="정책을 저장하고 미리보기를 실행하면 이곳에 표시됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel>
+     </Grid></Border>
+    </StackPanel>
+   </ScrollViewer>
+  </TabItem>
+  <TabItem Header="드라이브 정책" Tag="&#xE713;" ToolTip="정리할 폴더와 용량 기준, 보존 기간을 설정하세요.">
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Style="{StaticResource Card}" Padding="12"><DockPanel>
+     <Button DockPanel.Dock="Top" Content="+ 새 정책" Command="{Binding NewCommand}" Margin="0,0,0,16"/>
+     <ListBox ItemsSource="{Binding Policies}" SelectedItem="{Binding SelectedPolicy}" AutomationProperties.Name="정책 목록"><ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding RetentionDays,StringFormat=보존 기간 {0}일}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,0"/></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox>
+    </DockPanel></Border>
+    <Grid Grid.Column="2">
+     <DockPanel>
+      <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,16,0,0"><DockPanel>
+       <Button Content="정책 삭제" Command="{Binding DeleteCommand}" Style="{StaticResource DangerButton}" DockPanel.Dock="Left"/>
+       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="지금 정리" Command="{Binding RunCommand}" Margin="0,0,8,0"/><Button Content="미리보기" Command="{Binding PreviewCommand}" Margin="0,0,8,0"/><Button Content="정책 저장" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}"/></StackPanel>
+      </DockPanel></Border>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0"><StackPanel>
+       <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+        <TextBlock Text="기본 정보" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제는 아래에 등록한 폴더 안에서만 수행됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,20"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="정책 이름" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding SelectedPolicy.Name,UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="정책 이름"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="대상 볼륨" Style="{StaticResource FieldLabel}"/><ComboBox ItemsSource="{Binding Volumes}" DisplayMemberPath="Summary" SelectedValuePath="Id" SelectedValue="{Binding SelectedPolicy.VolumeId}" AutomationProperties.Name="대상 볼륨"/></StackPanel>
+        </Grid>
+        <DockPanel Margin="0,18,0,8"><Button Content="폴더 추가…" DockPanel.Dock="Right" Command="{Binding AddRootCommand}" Padding="10,5" MinHeight="30"/><TextBlock Text="관리할 폴더" Foreground="{StaticResource MutedBrush}"/></DockPanel>
+        <TextBox Text="{Binding SelectedPolicy.Roots,UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="80" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="관리할 폴더 경로"/>
+        <TextBlock Text="한 줄에 한 경로를 입력하세요." Style="{StaticResource MutedText}" FontSize="11" Margin="0,7,0,0"/>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+        <TextBlock Text="정리 기준" Style="{StaticResource SectionTitle}"/><TextBlock Text="기준에 도달하면 보존 기간이 지난 항목을 오래된 순서대로 정리합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,20"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="용량 판단 기준" Style="{StaticResource FieldLabel}"/><ComboBox AutomationProperties.Name="용량 판단 기준" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedPolicy.Mode}" ItemTemplate="{StaticResource EnumTemplate}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="정리 시작값" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="정리 시작값" Text="{Binding SelectedPolicy.Start,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="4"><TextBlock Text="정리 종료값" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="정리 종료값" Text="{Binding SelectedPolicy.Stop,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
+        </Grid>
+        <TextBlock Text="사용률 기준은 %, 사용·여유 용량 기준은 bytes 단위입니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,18"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="보존 기간 (일)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="보존 기간 (일)" Text="{Binding SelectedPolicy.RetentionDays,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="기간 판단 시각" Style="{StaticResource FieldLabel}"/><ComboBox AutomationProperties.Name="기간 판단 시각" ItemsSource="{Binding AgeOptions}" SelectedItem="{Binding SelectedPolicy.AgeBasis}" ItemTemplate="{StaticResource EnumTemplate}"/></StackPanel>
+        </Grid>
+        <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="6" Padding="12" Margin="0,18,0,0"><StackPanel><CheckBox Content="자동 정리 활성화" IsChecked="{Binding SelectedPolicy.Enabled}" Margin="0"/><TextBlock Text="저장 후 미리보기로 삭제 대상을 확인하세요. 활성화 시 확인 창이 표시됩니다." Style="{StaticResource MutedText}" FontSize="11" Margin="26,7,0,0"/></StackPanel></Border>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+        <TextBlock Text="제외 항목" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제하지 않을 경로와 확장자를 지정하세요." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+        <TextBlock Text="제외 경로 · 한 줄에 한 경로" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="제외 경로 · 한 줄에 한 경로" Text="{Binding SelectedPolicy.Excluded}" AcceptsReturn="True" Height="68" VerticalScrollBarVisibility="Auto"/>
+        <TextBlock Text="제외 확장자 · 쉼표로 구분" Style="{StaticResource FieldLabel}" Margin="0,16,0,6"/><TextBox AutomationProperties.Name="제외 확장자 · 쉼표로 구분" Text="{Binding SelectedPolicy.Extensions}"/>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}"><Expander Header="고급 설정 · 실행 주기와 안전 제한"><StackPanel Margin="0,18,0,0">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="점검 주기 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="점검 주기 (초)" Text="{Binding SelectedPolicy.Interval,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="재실행 대기 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="재실행 대기 (초)" Text="{Binding SelectedPolicy.Cooldown,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="4"><TextBlock Text="복구 보호 (시간)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="복구 보호 (시간)" Text="{Binding SelectedPolicy.ProtectionHours,ValidatesOnExceptions=True}"/></StackPanel>
+        </Grid>
+        <Grid Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="1회 삭제 상한 (GiB)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="1회 삭제 상한 (GiB)" Text="{Binding SelectedPolicy.DeleteLimitGiB,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="읽기 상한 (MiB/s)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="읽기 상한 (MiB/s)" Text="{Binding SelectedPolicy.ReadMiB,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="4"><TextBlock Text="처리 항목 상한" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="처리 항목 상한" Text="{Binding SelectedPolicy.ItemLimit,ValidatesOnExceptions=True}"/></StackPanel>
+        </Grid>
+        <Grid Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="시작 시각 (0~23)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="시작 시각 (0~23)" Text="{Binding SelectedPolicy.StartHour,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="종료 시각 (1~24)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="종료 시각 (1~24)" Text="{Binding SelectedPolicy.EndHour,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="4"><TextBlock Text="스캔 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="스캔 제한 (초)" Text="{Binding SelectedPolicy.ScanLimit,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="6"><TextBlock Text="삭제 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="삭제 제한 (초)" Text="{Binding SelectedPolicy.RunLimit,ValidatesOnExceptions=True}"/></StackPanel>
+        </Grid>
+        <TextBlock Text="캐시보다 큰 파일, 링크, 최근 파일, 복구 보호 대상은 건너뜁니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,18,0,0"/>
+       </StackPanel></Expander></Border>
       </StackPanel></ScrollViewer>
      </DockPanel>
+     <Border Background="{StaticResource CanvasBrush}"><Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding SelectedPolicy}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style><StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="첫 번째 정리 정책을 만들어보세요" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="대상 폴더와 보존 기간을 지정한 후 미리보기로 확인할 수 있습니다." Style="{StaticResource MutedText}" Margin="0,12,0,24"/><Button Content="+ 새 정책 만들기" Command="{Binding NewCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center"/></StackPanel></Border>
     </Grid>
-   </TabItem>
-   <TabItem Header="삭제 이력">
-    <DockPanel><StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
-     <TextBox Text="{Binding Filter}" Width="350" ToolTip="경로 검색"/><Button Content="검색" Command="{Binding SearchCommand}"/>
-     <Button Content="이전" Command="{Binding PreviousCommand}"/><Button Content="다음" Command="{Binding NextCommand}"/>
-     <Button Content="현재 목록 CSV" Command="{Binding ExportCommand}"/><TextBlock Text="{Binding HistoryPageText}" Margin="12,0"/>
-    </StackPanel>
-     <GroupBox DockPanel.Dock="Bottom" Header="폴더별 집계 · 여유 순변화에는 외부 I/O가 포함됩니다." Height="190" Margin="0,12,0,0">
-      <DataGrid ItemsSource="{Binding Folders}"><DataGrid.Columns>
-       <DataGridTextColumn Header="폴더 경로" Binding="{Binding Path}" Width="*"/>
-       <DataGridTextColumn Header="파일 수" Binding="{Binding DeletedFiles}" Width="85"/><DataGridTextColumn Header="폴더 수" Binding="{Binding DeletedDirectories}" Width="85"/>
-       <DataGridTextColumn Header="논리 삭제 바이트" Binding="{Binding LogicalBytes,StringFormat=N0}" Width="150"/>
-       <DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,StringFormat=N0}" Width="150"/>
-      </DataGrid.Columns></DataGrid>
-     </GroupBox>
+   </Grid>
+  </TabItem>
+  <TabItem Header="삭제 기록" Tag="&#xE81C;" ToolTip="삭제 경로, 처리 결과와 확보 공간을 확인하세요.">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="190"/></Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,18"><Button DockPanel.Dock="Right" Content="CSV 내보내기" Command="{Binding ExportCommand}"/><StackPanel Orientation="Horizontal"><TextBox Text="{Binding Filter}" Width="300" ToolTip="경로를 입력하여 검색" AutomationProperties.Name="삭제 경로 검색"/><Button Content="검색" Command="{Binding SearchCommand}" Margin="8,0,0,0"/></StackPanel></DockPanel>
+    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid>
      <DataGrid ItemsSource="{Binding History}" SelectedItem="{Binding SelectedItem}"><DataGrid.Columns>
-      <DataGridTextColumn Header="UTC" Binding="{Binding Utc,StringFormat=MM-dd HH:mm:ss}" Width="120"/><DataGridTextColumn Header="종류" Binding="{Binding Kind}" Width="60"/>
-      <DataGridTextColumn Header="경로" Binding="{Binding Path}" Width="*"/><DataGridTextColumn Header="상태" Binding="{Binding State}" Width="150"/>
-      <DataGridTextColumn Header="논리 바이트" Binding="{Binding Bytes,StringFormat=N0}" Width="120"/><DataGridTextColumn Header="복구 상태" Binding="{Binding RecoveryState}" Width="170"/>
-      <DataGridTextColumn Header="사유" Binding="{Binding Reason}" Width="240"/>
+      <DataGridTextColumn Header="처리 시각" Binding="{Binding Utc,Converter={StaticResource LocalTime}}" Width="136"/><DataGridTextColumn Header="종류" Binding="{Binding Kind}" Width="60"/>
+      <DataGridTextColumn Header="경로" Binding="{Binding Path}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="150"/>
+      <DataGridTextColumn Header="처리 결과" Binding="{Binding State,Converter={StaticResource State}}" Width="110"/>
+      <DataGridTextColumn Header="용량" Binding="{Binding Bytes,Converter={StaticResource Bytes}}" Width="100"/><DataGridTextColumn Header="복구 상태" Binding="{Binding RecoveryState,Converter={StaticResource State}}" Width="114"/>
+      <DataGridTextColumn Header="사유" Binding="{Binding Reason}" ElementStyle="{StaticResource PathText}" Width="200"/>
      </DataGrid.Columns></DataGrid>
-    </DockPanel>
-   </TabItem>
-   <TabItem Header="복구센터">
-    <DockPanel><StackPanel DockPanel.Dock="Top">
-     <TextBlock Text="최근 삭제본만 보관합니다. FIFO 퇴출·서비스 재시작·전원 종료 시 복구본이 사라집니다." Foreground="#EDC27C" Margin="4,4,4,12"/>
-     <StackPanel Orientation="Horizontal"><Button Content="선택 항목 복구" Command="{Binding RestoreCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="다른 폴더로 복구…" Command="{Binding RestoreElsewhereCommand}"/></StackPanel>
-     <StackPanel Orientation="Horizontal" Margin="0,8,0,12"><TextBox Text="{Binding RecoveryFolder}" Width="540"/><Button Content="폴더 아래 남은 항목 복구" Command="{Binding RestoreFolderCommand}"/></StackPanel>
-    </StackPanel>
-     <DataGrid ItemsSource="{Binding Recovery}" SelectedItem="{Binding SelectedRecovery}"><DataGrid.Columns>
-      <DataGridTextColumn Header="삭제 UTC" Binding="{Binding DeletedUtc,StringFormat=MM-dd HH:mm:ss}" Width="130"/><DataGridTextColumn Header="원래 경로" Binding="{Binding Path}" Width="*"/>
-      <DataGridTextColumn Header="바이트" Binding="{Binding Length,StringFormat=N0}" Width="140"/><DataGridTextColumn Header="상태" Binding="{Binding State}" Width="170"/>
-     </DataGrid.Columns></DataGrid>
-    </DockPanel>
-   </TabItem>
-   <TabItem Header="자원 모니터">
-    <DockPanel><StackPanel DockPanel.Dock="Top">
-     <TextBlock Text="점유 용량은 대시보드, 아래 표는 I/O 부하와 센서 표본입니다. 0 B/s는 유휴일 수 있습니다. 온도 미지원은 상태에 표시됩니다." TextWrapping="Wrap" Margin="4,4,4,14"/>
-     <StackPanel Orientation="Horizontal"><TextBlock Text="디스크 장치" Margin="4"/><ComboBox Width="180" ItemsSource="{Binding DiskEntities}" SelectedItem="{Binding SelectedDisk}"/></StackPanel>
-     <UniformGrid Columns="3" Height="170" Margin="0,0,0,14">
-      <GroupBox Header="읽기 처리량 · MiB/s"><local:Sparkline Values="{Binding ReadSeries}" Maximum="0"/></GroupBox>
-      <GroupBox Header="쓰기 처리량 · MiB/s"><local:Sparkline Values="{Binding WriteSeries}" Maximum="0"/></GroupBox>
-      <GroupBox Header="읽기/쓰기 최대 지연 · ms"><local:Sparkline Values="{Binding LatencySeries}" Maximum="0"/></GroupBox>
-     </UniformGrid>
-    </StackPanel>
-     <DataGrid ItemsSource="{Binding Metrics}"><DataGrid.Columns>
-      <DataGridTextColumn Header="장치" Binding="{Binding Entity}" Width="180"/><DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="180"/>
-      <DataGridTextColumn Header="값" Binding="{Binding Display}" Width="140"/><DataGridTextColumn Header="표본 상태" Binding="{Binding Quality}" Width="140"/>
-      <DataGridTextColumn Header="출처" Binding="{Binding Provider}" Width="200"/><DataGridTextColumn Header="상세" Binding="{Binding Detail}" Width="*"/>
-     </DataGrid.Columns></DataGrid>
-    </DockPanel>
-   </TabItem>
-   <TabItem Header="알람센터">
-    <DockPanel><StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-     <Button Content="확인 처리" Command="{Binding AcknowledgeCommand}"/><Button Content="해당 파일 다시 시도" Command="{Binding RetryCommand}"/>
-     <Button Content="정상 종료 요청" Command="{Binding NormalCloseCommand}"/><Button Content="강제 종료 후 삭제…" Command="{Binding ForceCloseCommand}" Style="{StaticResource DangerButton}"/>
-    </StackPanel>
-     <DataGrid ItemsSource="{Binding Alerts}" SelectedItem="{Binding SelectedAlert}"><DataGrid.Columns>
-      <DataGridCheckBoxColumn Header="확인" Binding="{Binding Acknowledged}" Width="55"/><DataGridTextColumn Header="UTC" Binding="{Binding Utc,StringFormat=MM-dd HH:mm:ss}" Width="120"/>
-      <DataGridTextColumn Header="등급" Binding="{Binding Severity}" Width="90"/><DataGridTextColumn Header="분류" Binding="{Binding Category}" Width="150"/>
-      <DataGridTextColumn Header="메시지" Binding="{Binding Message}" Width="*"/><DataGridTextColumn Header="경로" Binding="{Binding Path}" Width="300"/>
-     </DataGrid.Columns></DataGrid>
-    </DockPanel>
-   </TabItem>
-   <TabItem Header="환경설정">
-    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel MaxWidth="820" HorizontalAlignment="Left">
-     <TextBlock Text="종료 허용 앱" FontSize="18" FontWeight="Bold" Margin="4,4,4,10"/>
-     <TextBlock Text="현재 사용자 세션의 앱 중 아래 실행 파일 이름만 종료할 수 있습니다. 한 줄에 하나씩 입력하세요." TextWrapping="Wrap" Margin="4"/>
-     <TextBox Text="{Binding AllowedApps}" Height="100" AcceptsReturn="True"/>
-     <Grid Margin="0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <StackPanel><TextBlock Text="이력 보관 일수"/><TextBox Text="{Binding Settings.HistoryDays,ValidatesOnExceptions=True}"/>
-       <TextBlock Text="CPU 부하 경고 (%)"/><TextBox Text="{Binding Settings.CpuWarningPercent,ValidatesOnExceptions=True}"/>
-       <TextBlock Text="CPU 온도 경고 (℃)"/><TextBox Text="{Binding Settings.CpuTemperatureWarning,ValidatesOnExceptions=True}"/>
-      </StackPanel>
-      <StackPanel Grid.Column="1"><TextBlock Text="디스크 지연 경고 (ms)"/><TextBox Text="{Binding Settings.DiskLatencyWarningMs,ValidatesOnExceptions=True}"/>
-       <TextBlock Text="디스크 온도 경고 (℃)"/><TextBox Text="{Binding Settings.DiskTemperatureWarning,ValidatesOnExceptions=True}"/>
-       <TextBlock Text="이상 지속 시간 (초)"/><TextBox Text="{Binding Settings.AnomalyDurationSeconds,ValidatesOnExceptions=True}"/>
-      </StackPanel>
-     </Grid>
-     <CheckBox Content="디스크 심각 알람에서 자동 정리 중단" IsChecked="{Binding Settings.PauseOnHealthCritical}"/>
-     <Button Content="환경설정 저장" Command="{Binding SaveSettingsCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/>
-     <TextBlock Text="온도·지연 임계값은 대상 장비 기준으로 조정하세요. 앱 창을 닫으면 트레이로 이동하고 서비스는 계속 동작합니다." TextWrapping="Wrap" Foreground="#A4BAD0" Margin="4,18,4,4"/>
+     <StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding History.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="표시할 삭제 기록이 없습니다" HorizontalAlignment="Center"/><TextBlock Text="정리 작업을 실행하거나 검색 조건을 변경하세요." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel>
+    </Grid></Border>
+    <DockPanel Grid.Row="2" Margin="0,14,0,18"><StackPanel Orientation="Horizontal" DockPanel.Dock="Right"><Button Content="이전" Command="{Binding PreviousCommand}" Style="{StaticResource GhostButton}"/><Button Content="다음" Command="{Binding NextCommand}" Style="{StaticResource GhostButton}"/></StackPanel><TextBlock Text="{Binding HistoryPageText}" Style="{StaticResource MutedText}" FontSize="12"/></DockPanel>
+    <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0"><DockPanel><StackPanel DockPanel.Dock="Top" Margin="16,14"><TextBlock Text="폴더별 집계" Style="{StaticResource SectionTitle}"/><TextBlock Text="여유 공간 순변화에는 같은 시점의 외부 읽기·쓰기도 반영될 수 있습니다." Style="{StaticResource MutedText}" FontSize="11"/></StackPanel><DataGrid ItemsSource="{Binding Folders}" MinHeight="90"><DataGrid.Columns><DataGridTextColumn Header="폴더 경로" Binding="{Binding Path}" ElementStyle="{StaticResource PathText}" Width="*"/><DataGridTextColumn Header="파일" Binding="{Binding DeletedFiles}" Width="70"/><DataGridTextColumn Header="폴더" Binding="{Binding DeletedDirectories}" Width="70"/><DataGridTextColumn Header="삭제 용량" Binding="{Binding LogicalBytes,Converter={StaticResource Bytes}}" Width="120"/><DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,Converter={StaticResource Bytes}}" Width="120"/></DataGrid.Columns></DataGrid></DockPanel></Border>
+   </Grid>
+  </TabItem>
+  <TabItem Header="복구 센터" Tag="&#xE777;" ToolTip="RAM에 남아 있는 최근 삭제 항목을 복구하세요.">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,20"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="최근 삭제본을 잠시 보관합니다" Style="{StaticResource SectionTitle}"/><TextBlock Text="최대 1 GiB RAM 캐시 · 오래된 보관본부터 제거됩니다." Style="{StaticResource MutedText}" Margin="0,5,24,0"/><TextBlock Text="서비스 재시작·전원 종료 후에는 복구할 수 없습니다." Foreground="{StaticResource WarningBrush}" FontSize="12" Margin="0,10,0,0"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding CacheSummary}" HorizontalAlignment="Right" FontSize="17" Margin="0,0,0,12"/><ProgressBar Value="{Binding CachePercent}" Maximum="100"/></StackPanel></Grid></Border>
+    <Grid Grid.Row="1" Margin="0,0,0,18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <StackPanel Orientation="Horizontal" Margin="0,0,0,16"><Button Content="선택 항목 복구" Command="{Binding RestoreCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="다른 폴더로 복구…" Command="{Binding RestoreElsewhereCommand}" Margin="8,0,0,0"/></StackPanel>
+     <DockPanel Grid.Row="1"><Button DockPanel.Dock="Right" Content="폴더 내 보관 항목 복구" Command="{Binding RestoreFolderCommand}" Margin="8,0,0,0"/><TextBox Text="{Binding RecoveryFolder}" ToolTip="복구할 원래 폴더 경로" AutomationProperties.Name="복구할 폴더 경로"/></DockPanel>
+    </Grid>
+    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid><DataGrid ItemsSource="{Binding Recovery}" SelectedItem="{Binding SelectedRecovery}"><DataGrid.Columns><DataGridTextColumn Header="삭제 시각" Binding="{Binding DeletedUtc,Converter={StaticResource LocalTime}}" Width="150"/><DataGridTextColumn Header="원래 경로" Binding="{Binding Path}" ElementStyle="{StaticResource PathText}" Width="*"/><DataGridTextColumn Header="용량" Binding="{Binding Length,Converter={StaticResource Bytes}}" Width="120"/><DataGridTextColumn Header="상태" Binding="{Binding State,Converter={StaticResource State}}" Width="140"/></DataGrid.Columns></DataGrid><StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding Recovery.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="복구 가능한 보관본이 없습니다" HorizontalAlignment="Center"/><TextBlock Text="새로 삭제된 항목이 캐시에 보관되면 표시됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Grid></Border>
+   </Grid>
+  </TabItem>
+  <TabItem Header="리소스 모니터" Tag="&#xE9D9;" ToolTip="CPU와 디스크의 사용량, 온도, 응답 지연을 확인하세요.">
+   <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0"><StackPanel>
+    <UniformGrid Columns="4" Margin="0,0,-12,24">
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="CPU 사용률" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding CpuText}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="CPU 온도" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding CpuTemperatureText}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="디스크 읽기" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding ReadRateText}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="디스크 쓰기" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding WriteRateText}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+    </UniformGrid>
+    <DockPanel Margin="0,0,0,14"><ComboBox DockPanel.Dock="Right" Width="180" ItemsSource="{Binding DiskEntities}" SelectedItem="{Binding SelectedDisk}" AutomationProperties.Name="모니터링 디스크"/><StackPanel><TextBlock Text="디스크 I/O" Style="{StaticResource SectionTitle}"/><TextBlock Text="현재 선택한 디스크 · 최근 120개 표본" Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
+    <UniformGrid Columns="3" Margin="0,0,-12,24">
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0" Padding="16"><StackPanel><TextBlock Text="읽기 속도" Foreground="{StaticResource ChartReadBrush}"/><TextBlock Text="{Binding ReadRateText}" FontSize="19" Margin="0,8,0,8"/><local:Sparkline Values="{Binding ReadSeries}" Maximum="0" Unit="MiB/s" Stroke="{StaticResource ChartReadBrush}" Height="132"/></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0" Padding="16"><StackPanel><TextBlock Text="쓰기 속도" Foreground="{StaticResource ChartWriteBrush}"/><TextBlock Text="{Binding WriteRateText}" FontSize="19" Margin="0,8,0,8"/><local:Sparkline Values="{Binding WriteSeries}" Maximum="0" Unit="MiB/s" Stroke="{StaticResource ChartWriteBrush}" Height="132"/></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,12,0" Padding="16"><StackPanel><TextBlock Text="최대 응답 지연" Foreground="{StaticResource ChartLatencyBrush}"/><TextBlock Text="{Binding LatencyText}" FontSize="19" Margin="0,8,0,8"/><local:Sparkline Values="{Binding LatencySeries}" Maximum="0" Unit="ms" Stroke="{StaticResource ChartLatencyBrush}" Height="132"/></StackPanel></Border>
+    </UniformGrid>
+    <TextBlock Text="센서 상세" Style="{StaticResource SectionTitle}"/><TextBlock Text="0 B/s는 유휴 상태일 수 있습니다. 온도 센서가 없거나 권한이 부족하면 미지원·측정 대기로 표시됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,2,0,14"/>
+    <Border Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid><DataGrid ItemsSource="{Binding Metrics}" Height="300"><DataGrid.Columns><DataGridTextColumn Header="장치" Binding="{Binding Entity}" Width="140"/><DataGridTextColumn Header="측정 항목" Binding="{Binding Name,Converter={StaticResource MetricName}}" Width="150"/><DataGridTextColumn Header="현재 값" Binding="{Binding Converter={StaticResource MetricValue}}" Width="140"/><DataGridTextColumn Header="표본 상태" Binding="{Binding Quality,Converter={StaticResource State}}" Width="110"/><DataGridTextColumn Header="출처" Binding="{Binding Provider}" Width="130"/><DataGridTextColumn Header="상세" Binding="{Binding Detail}" ElementStyle="{StaticResource PathText}" Width="*"/></DataGrid.Columns></DataGrid><StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding Metrics.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="센서 표본을 기다리고 있습니다" HorizontalAlignment="Center"/><TextBlock Text="서비스와 센서 호스트의 상태를 확인하세요." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Grid></Border>
+   </StackPanel></ScrollViewer>
+  </TabItem>
+  <TabItem Header="알림 센터" Tag="&#xE7F4;" ToolTip="잠긴 파일과 디스크 이상 상태를 확인하고 조치하세요.">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Border Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid><DataGrid ItemsSource="{Binding Alerts}" SelectedItem="{Binding SelectedAlert}"><DataGrid.Columns><DataGridCheckBoxColumn Header="확인" Binding="{Binding Acknowledged}" Width="55"/><DataGridTextColumn Header="발생 시각" Binding="{Binding Utc,Converter={StaticResource LocalTime}}" Width="140"/><DataGridTextColumn Header="등급" Binding="{Binding Severity,Converter={StaticResource State}}" Width="75"/><DataGridTextColumn Header="분류" Binding="{Binding Category,Converter={StaticResource State}}" Width="120"/><DataGridTextColumn Header="메시지" Binding="{Binding Message}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="150"/><DataGridTextColumn Header="경로" Binding="{Binding Path}" ElementStyle="{StaticResource PathText}" Width="240"/></DataGrid.Columns></DataGrid><StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding Alerts.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="등록된 알림이 없습니다" HorizontalAlignment="Center"/><TextBlock Text="파일 잠금과 디스크 이상이 감지되면 여기에 표시됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Grid></Border>
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,20,0,0"><StackPanel><TextBlock Text="선택한 알림" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding SelectedAlert.Message,TargetNullValue=목록에서 알림을 선택하면 상세 내용과 처리 작업을 확인할 수 있습니다.}" TextWrapping="Wrap" Margin="0,8,0,6"/><TextBlock Text="{Binding SelectedAlert.Path}" Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedAlert.Path}"/>
+     <WrapPanel Margin="0,18,0,0"><Button Content="확인 처리" Command="{Binding AcknowledgeCommand}" Margin="0,0,8,8"/><Button Content="다시 시도" Command="{Binding RetryCommand}" Margin="0,0,8,8"/><Button Content="정상 종료 요청" Command="{Binding NormalCloseCommand}" Margin="0,0,8,8"/><Button Content="강제 종료 후 삭제…" Command="{Binding ForceCloseCommand}" Style="{StaticResource DangerButton}" Margin="0,0,0,8"/></WrapPanel>
+     <TextBlock Text="종료 작업은 사용 중인 파일 알림에 적용됩니다. 강제 종료 전 대상 앱과 파일을 다시 확인합니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/>
+    </StackPanel></Border>
+   </Grid>
+  </TabItem>
+  <TabItem Header="환경설정" Tag="&#xE115;" ToolTip="기록 보관, 센서 경고 기준과 백그라운드 동작을 관리하세요.">
+   <DockPanel>
+    <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,16,0,0"><Button Content="변경 사항 저장" Command="{Binding SaveSettingsCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"/></Border>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0"><StackPanel>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="240"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,24,0"><TextBlock Text="백그라운드 정리" Style="{StaticResource SectionTitle}"/><TextBlock Text="일시정지는 새로운 삭제 작업을 멈춥니다. 진행 중 작업은 개요에서 취소할 수 있습니다." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="일시정지" Command="{Binding PauseCommand}" Margin="0,0,8,0"/><Button Content="재개" Command="{Binding ResumeCommand}"/></StackPanel></Grid></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="기록 보관" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제·복구·알림 이력을 보관할 기간을 지정합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/><StackPanel Width="220" HorizontalAlignment="Left"><TextBlock Text="이력 보관 기간 (일)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="이력 보관 기간 (일)" Text="{Binding Settings.HistoryDays,ValidatesOnExceptions=True}"/></StackPanel></StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="리소스 경고 기준" Style="{StaticResource SectionTitle}"/><TextBlock Text="경고 기준을 초과한 상태가 지정 시간 동안 지속되면 기록합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock Text="CPU 사용률 (%)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="CPU 사용률 (%)" Text="{Binding Settings.CpuWarningPercent,ValidatesOnExceptions=True}"/><TextBlock Text="디스크 지연 (ms)" Style="{StaticResource FieldLabel}" Margin="0,18,0,6"/><TextBox AutomationProperties.Name="디스크 지연 (ms)" Text="{Binding Settings.DiskLatencyWarningMs,ValidatesOnExceptions=True}"/></StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="CPU 온도 (℃)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="CPU 온도 (℃)" Text="{Binding Settings.CpuTemperatureWarning,ValidatesOnExceptions=True}"/><TextBlock Text="디스크 온도 (℃)" Style="{StaticResource FieldLabel}" Margin="0,18,0,6"/><TextBox AutomationProperties.Name="디스크 온도 (℃)" Text="{Binding Settings.DiskTemperatureWarning,ValidatesOnExceptions=True}"/></StackPanel>
+       <StackPanel Grid.Column="4"><TextBlock Text="이상 지속 시간 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="이상 지속 시간 (초)" Text="{Binding Settings.AnomalyDurationSeconds,ValidatesOnExceptions=True}"/></StackPanel>
+      </Grid>
+      <CheckBox Content="디스크 심각 알림 발생 시 자동 정리 중단" IsChecked="{Binding Settings.PauseOnHealthCritical}" Margin="0,20,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="종료 허용 앱" Style="{StaticResource SectionTitle}"/><TextBlock Text="현재 사용자 세션에서 아래 실행 파일 이름에 해당하는 앱만 종료할 수 있습니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/><TextBlock Text="실행 파일 이름 · 한 줄에 하나" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding AllowedApps}" Height="90" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="종료 허용 앱 목록"/><TextBlock Text="예: notepad.exe · 저장하지 않은 작업은 종료 시 사라질 수 있습니다." Foreground="{StaticResource WarningBrush}" FontSize="11" Margin="0,10,0,0"/></StackPanel></Border>
     </StackPanel></ScrollViewer>
-   </TabItem>
-  </TabControl>
-  <Border Grid.Row="3" Padding="10,12,4,0"><TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#AAC1D8"/></Border>
- </Grid>
+   </DockPanel>
+  </TabItem>
+ </TabControl>
 </Window>

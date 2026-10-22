@@ -15,10 +15,13 @@
     <Compile Include="LockAlertWindow.xaml.cs"><DependentUpon>LockAlertWindow.xaml</DependentUpon></Compile>
     <Compile Include="MainWindow.xaml.cs"><DependentUpon>MainWindow.xaml</DependentUpon></Compile>
     <Compile Include="Sparkline.cs" />
+    <Compile Include="DisplayConverter.cs" />
+    <Compile Include="UiPreviewClient.cs" />
     <Compile Include="UiAdapters.cs" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></ApplicationDefinition>
+    <Page Include="Themes\DesignSystem.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <Page Include="MainWindow.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <Page Include="LockAlertWindow.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <None Include="app.manifest" />

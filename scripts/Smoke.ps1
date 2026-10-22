@@ -20,8 +20,8 @@ try {
         if ($response.Data.Policies.Count -ne 0) { throw 'Fresh installation has unexpected policies.' }
     } finally { $pipe.Dispose() }
     $png=Join-Path $repo 'artifacts/dashboard.png'
-    $ui=Start-Process "$InstallDirectory/Desktop/ExplorerManager.Desktop.exe" -ArgumentList @('--smoke','--screenshot',('"'+$png+'"')) -PassThru
-    if (-not $ui.WaitForExit(45000)) { $ui.Kill(); throw 'WPF smoke test timed out.' }
+    $ui=Start-Process "$InstallDirectory/Desktop/ExplorerManager.Desktop.exe" -ArgumentList @('--smoke','--ui-preview','--screenshot',('"'+$png+'"')) -PassThru
+    if (-not $ui.WaitForExit(60000)) { $ui.Kill(); throw 'WPF smoke test timed out.' }
     if ($ui.ExitCode -ne 0) { throw "WPF smoke test failed: $($ui.ExitCode)" }
     if (-not (Test-Path $png)) { throw 'WPF screenshot was not created.' }
 } finally {

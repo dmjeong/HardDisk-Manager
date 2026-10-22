@@ -57,16 +57,22 @@ namespace ExplorerManager.Desktop
                         if (at >= 0 && at + 1 < e.Args.Length)
                         {
                             string screenshot = Path.GetFullPath(e.Args[at + 1]);
-                            for (int index = 0; index < window.Sections.Items.Count; index++)
+                            await CaptureSectionsAsync(window, screenshot);
+                            window.Width = window.MinWidth; window.Height = window.MinHeight;
+                            await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "compact.png"));
+                            window.Width = 1440; window.Height = 920;
+                            if (e.Args.Contains("--ui-preview"))
                             {
-                                window.Sections.SelectedIndex = index;
-                                await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
-                                string path = index == 0 ? screenshot : Path.Combine(outputDirectory,
-                                    Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
-                                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                                bitmap.Render(window);
-                                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                                using (var file = File.Create(path)) encoder.Save(file);
+                                _timer.Stop();
+                                window.DataContext = await UiPreviewClient.CreateAsync(ui);
+                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview.png"));
+                                window.Width = window.MinWidth; window.Height = window.MinHeight;
+                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview-compact.png"));
+                                var alert = new ExplorerManager.Domain.AlertRecord { Message = "예시: 다른 앱에서 파일을 사용하고 있어 건너뛰었습니다.", Path = @"D:\Media\Archive\capture-2026-08.mp4" };
+                                var dialog = new LockAlertWindow { Owner = window, DataContext = new LockAlertViewModel(alert) };
+                                dialog.Show();
+                                await Dispatcher.InvokeAsync(() => dialog.UpdateLayout(), DispatcherPriority.ContextIdle);
+                                Capture(dialog, Path.Combine(outputDirectory, "locked-file.png")); dialog.Close();
                             }
                         }
                         listener.Flush(); string errors = bindingOutput.ToString();
@@ -78,6 +84,24 @@ namespace ExplorerManager.Desktop
                 finish.Start();
             }
             else if (e.Args.Contains("--tray")) window.Hide();
+        }
+        private async System.Threading.Tasks.Task CaptureSectionsAsync(MainWindow window, string screenshot)
+        {
+            for (int index = 0; index < window.Sections.Items.Count; index++)
+            {
+                window.Sections.SelectedIndex = index;
+                await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
+                string path = index == 0 ? screenshot : Path.Combine(Path.GetDirectoryName(screenshot),
+                    Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
+                Capture(window, path);
+            }
+        }
+        private static void Capture(Window window, string path)
+        {
+            var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(window);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using (var file = File.Create(path)) encoder.Save(file);
         }
         protected override void OnExit(ExitEventArgs e)
         {
