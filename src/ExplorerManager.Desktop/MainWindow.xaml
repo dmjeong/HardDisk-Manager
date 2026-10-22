@@ -42,7 +42,7 @@
        <DataGrid.Columns>
         <DataGridTextColumn Header="Started" Binding="{Binding StartedUtc,Converter={StaticResource LocalTime}}" Width="130"/>
         <DataGridTextColumn Header="Policy" Binding="{Binding PolicyName}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="140"/>
-        <DataGridCheckBoxColumn Header="Preview" Binding="{Binding DryRun}" Width="74"/>
+        <DataGridCheckBoxColumn Header="Preview" Binding="{Binding DryRun}" Width="86"/>
         <DataGridTextColumn Header="Result" Binding="{Binding State,Converter={StaticResource State}}" Width="132"/>
         <DataGridTemplateColumn Header="Candidates" Width="126"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Candidates,StringFormat={}{0:N0}개}"/><TextBlock Text="{Binding CandidateBytes,Converter={StaticResource Bytes}}" Foreground="{StaticResource MutedBrush}" FontSize="11"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
         <DataGridTemplateColumn Header="Deleted items" Width="126"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding DeletedFiles,StringFormat=파일 {0:N0}개}"/><TextBlock Text="{Binding DeletedDirectories,StringFormat=폴더 {0:N0}개}" Foreground="{StaticResource MutedBrush}" FontSize="11"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
