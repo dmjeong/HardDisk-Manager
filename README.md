@@ -2,6 +2,14 @@
 
 여러 NTFS 드라이브를 감시하고 용량 기준을 넘으면 보관 기간이 지난 파일을 오래된 순서로 정리하는 Windows 프로그램입니다.
 
+## 화면
+
+좌측 메뉴, 드라이브 상태 카드, 구역별 정책 편집, 복구·알림 상세와 리소스 차트로 구성했습니다. 아래는 실제 WPF 컨트롤을 예시 데이터로 렌더링한 화면입니다. 표시된 드라이브·기록·센서 값은 운영 데이터가 아닙니다.
+
+![Explorer Manager 개요](docs/images/overview.png)
+
+[드라이브 정책](docs/images/policies.png) · [리소스 모니터](docs/images/monitoring.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39862785347)
+
 ## 실행 구성
 
 - WPF · .NET Framework 4.8 · x64 · MVVM
@@ -73,7 +81,7 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 3. 이전 평가 결과가 남아 있으면 `.vs`와 각 프로젝트의 `bin`·`obj`를 지우고 솔루션을 다시 엽니다.
 4. NuGet 패키지 복원 후 다시 빌드합니다. .NET Framework 4.8 **개발 팩**은 런타임과 별개이므로 설치 관리자에서 확인합니다.
 
-솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 44개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·7개 WPF 화면 렌더·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
+솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 56개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·7개 WPF 화면의 기본/최소 크기 및 예시 데이터 렌더·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
 
 ## 운영과 문서
 
