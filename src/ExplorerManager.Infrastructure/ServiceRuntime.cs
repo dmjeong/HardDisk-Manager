@@ -37,7 +37,7 @@ namespace ExplorerManager.Infrastructure
         private bool _busy, _paused, _started, _activeSafetyChecks, _activeRespectSchedule;
         private volatile string _activeStopReason;
         private readonly object _interlockLogSync = new object();
-        private readonly Dictionary<string, InterlockStatus> _processInterlocks = new Dictionary<string, InterlockStatus>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, InterlockStatus> _runtimeInterlocks = new Dictionary<string, InterlockStatus>(StringComparer.OrdinalIgnoreCase);
         private string _health = "Ready";
         private readonly string _dataDirectory;
         private readonly Mutex _instance;
@@ -116,7 +116,7 @@ namespace ExplorerManager.Infrastructure
                 catch (Exception ex)
                 { result.Add(Block("ProcessInspectionUnavailable", name, "프로세스 상태를 확인할 수 없습니다: " + ex.Message, now)); }
             }
-            TrackProcessInterlocks(result);
+            TrackRuntimeInterlocks(result);
             if (settings.PauseOnHealthCritical)
             {
                 var entities = new List<string>();
@@ -140,24 +140,24 @@ namespace ExplorerManager.Infrastructure
         private static bool StorageAlert(AlertRecord alert) => alert.Entity == "Storage" ||
             (alert.Entity ?? "").StartsWith("Disk", StringComparison.OrdinalIgnoreCase) || alert.Category == "DiskIO" ||
             alert.Category == "DiskHealth" || alert.Category == "DiskPerformance" || alert.Category == "WindowsStorageEvent";
-        private void TrackProcessInterlocks(List<InterlockStatus> all)
+        private void TrackRuntimeInterlocks(List<InterlockStatus> all)
         {
             lock (_interlockLogSync)
             {
-                var states = all.Where(x => x.Code == "ProcessRunning" || x.Code == "ProcessInspectionUnavailable").ToList();
+                var states = all.Where(x => x.Code == "ProcessRunning" || x.Code == "ProcessInspectionUnavailable" || x.Code == "TelemetryUnavailable" || x.Code == "AuditUnavailable").ToList();
                 foreach (var state in states)
                 {
                     string key = state.Code + "/" + state.Entity;
                     InterlockStatus previous;
-                    if (_processInterlocks.TryGetValue(key, out previous) && previous.Blocking == state.Blocking && previous.State == state.State)
+                    if (_runtimeInterlocks.TryGetValue(key, out previous) && previous.Blocking == state.Blocking && previous.State == state.State)
                         state.SinceUtc = previous.SinceUtc;
                     else if (state.Blocking || (previous != null && previous.Blocking))
                         _store.RecordEvent(state.Blocking ? "InterlockTripped" : "InterlockCleared", "Service", key, state.Detail);
                 }
-                foreach (var old in _processInterlocks.Where(x => x.Value.Blocking && !states.Any(n => string.Equals(n.Code + "/" + n.Entity, x.Key, StringComparison.OrdinalIgnoreCase))))
-                    _store.RecordEvent("InterlockCleared", "Service", old.Key, "프로세스 차단 조건 해소 또는 설정 변경");
-                _processInterlocks.Clear();
-                foreach (var state in states) _processInterlocks[state.Code + "/" + state.Entity] = state;
+                foreach (var old in _runtimeInterlocks.Where(x => x.Value.Blocking && !states.Any(n => string.Equals(n.Code + "/" + n.Entity, x.Key, StringComparison.OrdinalIgnoreCase))))
+                    _store.RecordEvent("InterlockCleared", "Service", old.Key, "차단 조건 해소 또는 설정 변경");
+                _runtimeInterlocks.Clear();
+                foreach (var state in states) _runtimeInterlocks[state.Code + "/" + state.Entity] = state;
             }
         }
         private async Task WatchInterlocksAsync()
