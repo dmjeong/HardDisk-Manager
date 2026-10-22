@@ -101,6 +101,70 @@ namespace ExplorerManager.Tests
                 Assert.Equal(1, first.Data.ToObject<DrivePolicy>().Version); Assert.Equal(first.Data.ToString(), again.Data.ToString());
             }
         }
+        [WindowsFact] public void CacheCapacitySettingsApplyImmediatelyAndSurviveServiceRecreation()
+        {
+            using (var f = new NativeFixture())
+            {
+                string data = Path.Combine(f.Base, "resize-runtime");
+                var caller = new Caller { Sid = "test-operator", Operator = true };
+                using (var runtime = new ServiceRuntime(data))
+                {
+                    foreach (long capacity in new[] { 2L * 1073741824, 256L * 1048576, AppSettings.MaximumCacheBytes })
+                    {
+                        var settings = new AppSettings { CacheBytes = capacity };
+                        var response = runtime.Execute(new Request { Command = "SaveSettings", Data = JObject.FromObject(settings) }, caller);
+                        Assert.True(response.Success, response.Error);
+                        var dashboard = runtime.Execute(new Request { Command = "Dashboard" }, caller).Data.ToObject<Dashboard>();
+                        Assert.Equal(capacity, dashboard.CacheCapacity); Assert.Equal(0, dashboard.CacheUsed);
+                        Assert.Equal(capacity, runtime.Execute(new Request { Command = "Settings" }, caller).Data.ToObject<AppSettings>().CacheBytes);
+                    }
+                }
+                using (var restarted = new ServiceRuntime(data))
+                    Assert.Equal(AppSettings.MaximumCacheBytes, restarted.Execute(new Request { Command = "Dashboard" }, caller).Data.ToObject<Dashboard>().CacheCapacity);
+            }
+        }
+        [WindowsFact] public void InvalidCacheCapacityDoesNotAlterPersistedOrRunningSettings()
+        {
+            using (var f = new NativeFixture())
+            using (var runtime = new ServiceRuntime(Path.Combine(f.Base, "invalid-resize-runtime")))
+            {
+                var caller = new Caller { Sid = "test-operator", Operator = true };
+                foreach (long capacity in new[] { 0L, AppSettings.MinimumCacheBytes - 1, AppSettings.MaximumCacheBytes + 1, long.MaxValue })
+                {
+                    var response = runtime.Execute(new Request { Command = "SaveSettings", Data = JObject.FromObject(new AppSettings { CacheBytes = capacity }) }, caller);
+                    Assert.False(response.Success); Assert.Contains("RAM", response.Error);
+                    Assert.Equal(AppSettings.DefaultCacheBytes, runtime.Execute(new Request { Command = "Settings" }, caller).Data.ToObject<AppSettings>().CacheBytes);
+                    Assert.Equal(AppSettings.DefaultCacheBytes, runtime.Execute(new Request { Command = "Dashboard" }, caller).Data.ToObject<Dashboard>().CacheCapacity);
+                }
+            }
+        }
+        [WindowsFact] public async Task CacheResizeIsRejectedDuringCleanupButOtherSettingsRemainEditable()
+        {
+            using (var f = new NativeFixture())
+            using (var runtime = new ServiceRuntime(Path.Combine(f.Base, "busy-resize-runtime")))
+            {
+                string path = f.OldFile("slow.bin"); File.WriteAllBytes(path, new byte[2 * 1048576]);
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-60)); f.Policy.ReadBytesPerSecond = 65536;
+                var caller = new Caller { Sid = "test-operator", Operator = true };
+                var saved = runtime.Execute(new Request { Command = "SavePolicy", Data = JObject.FromObject(f.Policy) }, caller);
+                Assert.True(saved.Success, saved.Error);
+                try
+                {
+                    var started = runtime.Execute(new Request { Command = "Run", Data = JObject.FromObject(new { f.Policy.Id }) }, caller);
+                    Assert.True(started.Success, started.Error);
+                    var resized = runtime.Execute(new Request { Command = "SaveSettings", Data = JObject.FromObject(new AppSettings { CacheBytes = 2L * 1073741824 }) }, caller);
+                    Assert.False(resized.Success); Assert.Contains("현재 작업", resized.Error);
+                    var unchangedCapacity = new AppSettings { HistoryDays = 120 };
+                    var other = runtime.Execute(new Request { Command = "SaveSettings", Data = JObject.FromObject(unchangedCapacity) }, caller);
+                    Assert.True(other.Success, other.Error);
+                    var actual = runtime.Execute(new Request { Command = "Settings" }, caller).Data.ToObject<AppSettings>();
+                    Assert.Equal(120, actual.HistoryDays); Assert.Equal(AppSettings.DefaultCacheBytes, actual.CacheBytes);
+                }
+                finally { await runtime.StopAsync(); }
+                var afterStop = runtime.Execute(new Request { Command = "SaveSettings", Data = JObject.FromObject(new AppSettings { CacheBytes = 2L * 1073741824 }) }, caller);
+                Assert.True(afterStop.Success, afterStop.Error);
+            }
+        }
         [WindowsFact] public async Task ForceCloseBrokerRejectsChangedIdentityAndTerminatesOnlyOwnedTestChild()
         {
             using (var child = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "ping.exe"), "-n 30 127.0.0.1")

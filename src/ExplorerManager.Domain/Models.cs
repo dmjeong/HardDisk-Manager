@@ -179,7 +179,10 @@ namespace ExplorerManager.Domain
 
     public sealed class AppSettings
     {
-        public long CacheBytes { get; set; } = 1073741824;
+        public const long MinimumCacheBytes = 1048576L;
+        public const long MaximumCacheBytes = 16L * 1073741824;
+        public const long DefaultCacheBytes = 1073741824L;
+        public long CacheBytes { get; set; } = DefaultCacheBytes;
         public List<string> AllowedProcessNames { get; set; } = new List<string>();
         public int HistoryDays { get; set; } = 90;
         public long HistoryMaxBytes { get; set; } = 2147483648;

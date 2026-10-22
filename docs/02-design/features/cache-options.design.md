@@ -1,0 +1,9 @@
+# Recovery cache options design
+
+- AppSettings owns shared minimum (1 MiB), maximum (16 GiB), default (1 GiB) cache limits; existing CacheBytes JSON remains compatible.
+- MainViewModel exposes a MiB draft with validation and byte conversion. Settings shows Recovery cache / Capacity (MiB), unit/range, immediate idle application and shrink eviction guidance. Persist via existing SaveSettings IPC. Refresh dashboard and recovery after success without overwriting unrelated draft settings. Dynamic confirmation text uses the current configured capacity.
+- Keep the same RecoveryCache instance/epoch. Resize is locked, validates range, computes complete FIFO victims under new data/metadata budgets and refuses protected reservations without partial eviction. A persistence callback runs after preflight and before eviction so storage failure preserves entries and capacity. Shrink trims free zeroed blocks; grow does not preallocate.
+- Capture revalidates fit under its reservation lock. Active/pinned preparation and restore entries are never evicted. Existing per-file delete intent, integrity checks and bounded memory accounting remain in place.
+- ServiceRuntime serializes changed capacity with StartOperation under _sync; reject while _busy. SqliteJournal saves settings and SettingsChanged event atomically. If audit eviction callbacks fail after persisted capacity, mark AuditUnavailable to prevent subsequent cleanup with mismatched configuration.
+- No automatic restart, no cache reset for growth, no mandatory confirmation for every save. Shrink behavior is explicit in the Settings card.
+- Validation: cache grow/shrink/content/FIFO/pins/preparation/free-pool/ranges/storage failure; viewmodel conversion/draft/range/save-refresh/error; Windows IPC persist/restart/busy/range plus full build/service/WPF smoke.

@@ -18,7 +18,7 @@ namespace ExplorerManager.Infrastructure
         private readonly object _sync = new object();
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>();
         private readonly Stack<byte[]> _free = new Stack<byte[]>();
-        private readonly long _metadataBudget;
+        private long _capacity, _metadataBudget;
         private readonly Action<string, string> _removed;
         private long _metadataUsed, _reservedBlocks, _allocatedBlocks;
         private bool _disposed;
@@ -33,34 +33,87 @@ namespace ExplorerManager.Infrastructure
         }
         public RecoveryCache(long capacity, Action<string, string> removed = null)
         {
-            if (capacity < 1024 * 1024 || capacity > 1073741824) throw new ArgumentOutOfRangeException(nameof(capacity));
-            Capacity = capacity;
-            _metadataBudget = Math.Min(16L * 1024 * 1024, capacity / 8);
+            ValidateCapacity(capacity);
+            _capacity = capacity;
+            _metadataBudget = MetadataBudget(capacity);
             _removed = removed;
         }
-        public long Capacity { get; }
+        public long Capacity { get { lock (_sync) return _capacity; } }
         public string Epoch { get; } = Guid.NewGuid().ToString("N");
         public long Used { get { lock (_sync) return _reservedBlocks * BlockCharge + _metadataUsed; } }
         private static int BlocksFor(long length) => checked((int)((length + BlockSize - 1) / BlockSize));
         private static long MetadataFor(FileSnapshot f) => 4096L + (f.Path?.Length ?? 0) * 4L + (f.Dacl?.Length ?? 0) * 4L;
-        public bool CanFit(FileSnapshot f) => f.Length >= 0 && f.Length <= Capacity &&
-            MetadataFor(f) <= _metadataBudget && BlocksFor(f.Length) * (long)BlockCharge <= Capacity - _metadataBudget;
-
-        public async Task<RecoveryInfo> CaptureAsync(FileSnapshot file, Stream input, string itemId, string runId, string policyId, long bytesPerSecond, CancellationToken cancellation)
+        public bool CanFit(FileSnapshot f)
         {
-            if (!CanFit(file)) throw new CacheCapacityException("파일 전체와 메타데이터를 캐시에 보관할 수 없습니다.");
-            var e = new Entry
-            {
-                File = file, Metadata = MetadataFor(file), BlockCount = BlocksFor(file.Length),
-                Info = new RecoveryInfo { Id = Guid.NewGuid().ToString("N"), ItemId = itemId, RunId = runId,
-                    PolicyId = policyId, Epoch = Epoch, Path = file.Path, IsDirectory = file.IsDirectory,
-                    Length = file.Length, State = "Preparing", DeletedUtc = DateTime.UtcNow }
-            };
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(RecoveryCache));
+                return CanFitCore(f);
+            }
+        }
+        private bool CanFitCore(FileSnapshot f) => f != null && f.Length >= 0 && f.Length <= _capacity &&
+            MetadataFor(f) <= _metadataBudget && BlocksFor(f.Length) * (long)BlockCharge <= _capacity - _metadataBudget;
+        private static long MetadataBudget(long capacity) => Math.Min(16L * 1024 * 1024, capacity / 8);
+        private static void ValidateCapacity(long capacity)
+        {
+            if (capacity < AppSettings.MinimumCacheBytes || capacity > AppSettings.MaximumCacheBytes)
+                throw new ArgumentOutOfRangeException(nameof(capacity));
+        }
+
+        public void Resize(long capacity, Action persist = null)
+        {
+            lock (_sync)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(RecoveryCache));
+                ValidateCapacity(capacity);
+                long metadataBudget = MetadataBudget(capacity);
+                if (capacity >= _capacity)
+                {
+                    persist?.Invoke();
+                    _capacity = capacity; _metadataBudget = metadataBudget;
+                    return;
+                }
+                long blocks = _reservedBlocks, metadata = _metadataUsed;
+                var victims = new List<Entry>();
+                foreach (var entry in _entries.Values.Where(e => !e.Pinned && e.Info.State != "Preparing" && e.Info.State != "CacheReady")
+                    .OrderBy(e => e.Info.DeletedUtc).ThenBy(e => e.Info.Id, StringComparer.Ordinal))
+                {
+                    if (blocks * BlockCharge <= capacity - metadataBudget && metadata <= metadataBudget) break;
+                    victims.Add(entry); blocks -= entry.BlockCount; metadata -= entry.Metadata;
+                }
+                if (blocks * BlockCharge > capacity - metadataBudget || metadata > metadataBudget)
+                    throw new CacheCapacityException("복구 중이거나 준비 중인 항목 때문에 캐시 크기를 줄일 수 없습니다.");
+
+                // Persist only after the complete resize is known to fit. A persistence failure changes nothing.
+                persist?.Invoke();
+                // A failing audit callback leaves the old budget in force and all accounting valid.
+                foreach (var victim in victims) Drop(victim, "CapacityReduced");
+                _capacity = capacity; _metadataBudget = metadataBudget;
+                long maximumBlocks = (capacity - metadataBudget) / BlockCharge;
+                while (_allocatedBlocks > maximumBlocks && _free.Count > 0)
+                { _free.Pop(); _allocatedBlocks--; }
+                _free.TrimExcess();
+            }
+        }
+
+        public async Task<RecoveryInfo> CaptureAsync(FileSnapshot file, Stream input, string itemId, string runId, string policyId, long bytesPerSecond, CancellationToken cancellation)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            Entry e;
+            lock (_sync)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(RecoveryCache));
+                cancellation.ThrowIfCancellationRequested();
+                if (!CanFitCore(file)) throw new CacheCapacityException("파일 전체와 메타데이터를 캐시에 보관할 수 없습니다.");
+                e = new Entry
+                {
+                    File = file, Metadata = MetadataFor(file), BlockCount = BlocksFor(file.Length),
+                    Info = new RecoveryInfo { Id = Guid.NewGuid().ToString("N"), ItemId = itemId, RunId = runId,
+                        PolicyId = policyId, Epoch = Epoch, Path = file.Path, IsDirectory = file.IsDirectory,
+                        Length = file.Length, State = "Preparing", DeletedUtc = DateTime.UtcNow }
+                };
                 while (_metadataUsed + e.Metadata > _metadataBudget ||
-                       (_reservedBlocks + e.BlockCount) * BlockCharge > Capacity - _metadataBudget || _entries.Count >= 4096)
+                       (_reservedBlocks + e.BlockCount) * BlockCharge > _capacity - _metadataBudget || _entries.Count >= 4096)
                 {
                     var victim = _entries.Values.Where(x => !x.Pinned && x.Info.State != "Preparing").OrderBy(x => x.Info.DeletedUtc).FirstOrDefault();
                     if (victim == null) throw new CacheCapacityException("복구 중이거나 준비 중인 항목 때문에 캐시 공간이 부족합니다.");
@@ -85,7 +138,7 @@ namespace ExplorerManager.Infrastructure
                             if (_free.Count > 0) block = _free.Pop();
                             else
                             {
-                                if ((_allocatedBlocks + 1) * BlockCharge > Capacity - _metadataBudget) throw new CacheCapacityException("메모리 풀 예산을 초과했습니다.");
+                                if ((_allocatedBlocks + 1) * BlockCharge > _capacity - _metadataBudget) throw new CacheCapacityException("메모리 풀 예산을 초과했습니다.");
                                 block = new byte[BlockSize]; _allocatedBlocks++;
                             }
                             e.Blocks.Add(block);
@@ -112,8 +165,7 @@ namespace ExplorerManager.Infrastructure
                 using (var content = new BlocksStream(e.Blocks, file.Length))
                     if (BitConverter.ToString(verify.ComputeHash(content)).Replace("-", "").ToLowerInvariant() != e.Info.Hash)
                         throw new IOException("캐시 무결성 확인에 실패했습니다.");
-                e.Info.State = "CacheReady";
-                return Copy(e.Info);
+                lock (_sync) { e.Info.State = "CacheReady"; return Copy(e.Info); }
             }
             catch { lock (_sync) { if (_entries.ContainsKey(e.Info.Id)) Drop(e, "PreparationFailed"); } throw; }
         }
@@ -209,7 +261,7 @@ namespace ExplorerManager.Infrastructure
             {
                 _disposed = true;
                 foreach (var e in _entries.Values.ToList()) Drop(e, "UnavailableAfterRestart");
-                _free.Clear();
+                _free.Clear(); _allocatedBlocks = 0;
             }
         }
     }

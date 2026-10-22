@@ -109,7 +109,20 @@ PRAGMA user_version=1;";
         {
             lock (_sync) return Read<AppSettings>("SELECT json FROM settings WHERE id='app'").SingleOrDefault() ?? new AppSettings();
         }
-        public void SaveSettings(AppSettings settings) { lock (_sync) Exec("INSERT OR REPLACE INTO settings VALUES('app',$0)", Json(settings)); }
+        public void SaveSettings(AppSettings settings, string actor = null)
+        {
+            lock (_sync)
+            using (var tx = _db.BeginTransaction())
+            {
+                using (var c = Command("INSERT OR REPLACE INTO settings VALUES('app',$0)", Json(settings)))
+                { c.Transaction = tx; c.ExecuteNonQuery(); }
+                if (actor != null)
+                    using (var c = Command("INSERT INTO events(utc,action,actor,entity,detail) VALUES($0,'SettingsChanged',$1,'',$2)",
+                        DateTime.UtcNow.ToString("O"), actor, "Recovery cache: " + settings.CacheBytes + " bytes"))
+                    { c.Transaction = tx; c.ExecuteNonQuery(); }
+                tx.Commit();
+            }
+        }
         public void SaveRun(RunRecord r) { lock (_sync) Exec("INSERT OR REPLACE INTO runs VALUES($0,$1,$2)", r.Id, r.StartedUtc.ToString("O"), Json(r)); }
         public List<RunRecord> Runs(int limit = 50) { lock (_sync) return Read<RunRecord>("SELECT json FROM runs ORDER BY utc DESC LIMIT $0", Math.Min(200, limit)); }
         public void RecordItem(ItemRecord i)

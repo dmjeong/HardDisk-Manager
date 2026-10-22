@@ -13,10 +13,11 @@ namespace ExplorerManager.Presentation
     {
         private readonly IExplorerClient _client;
         private readonly IUiServices _ui;
-        private bool _refreshing, _historyLoaded, _showingAlarm;
+        private bool _refreshing, _historyLoaded, _settingsLoaded, _showingAlarm;
+        private TaskCompletionSource<bool> _refreshFinished;
         private readonly System.Collections.Generic.HashSet<string> _seen = new System.Collections.Generic.HashSet<string>();
         private DateTime _lastPopup = DateTime.MinValue;
-        private string _message = "서비스에 연결하는 중…", _status = "연결 대기", _cacheText = "0 / 1 GiB", _filter = "", _folder = "", _allowedApps = "";
+        private string _message = "서비스에 연결하는 중…", _status = "연결 대기", _cacheText = "측정 대기", _filter = "", _folder = "", _allowedApps = "";
         private PolicyEditor _selectedPolicy;
         private ItemRecord _selectedItem;
         private AlertRecord _selectedAlert;
@@ -79,7 +80,11 @@ namespace ExplorerManager.Presentation
             {
                 if (!_ui.InputsValid) throw new InvalidOperationException("입력 오류를 먼저 수정하세요.");
                 Settings.AllowedProcessNames = AllowedApps.Split(new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
-                await _client.SendAsync<object>("SaveSettings", Settings); Message = "환경설정을 저장했습니다.";
+                await _client.SendAsync<object>("SaveSettings", Settings);
+                _settingsLoaded = true;
+                while (_refreshing) await _refreshFinished.Task;
+                await RefreshAsync();
+                Message = IsServiceConnected ? "환경설정을 저장하고 복구 캐시 상태를 갱신했습니다." : "환경설정은 저장했지만 최신 상태를 조회하지 못했습니다. " + Message;
             });
             ElevateCommand = Command(() => { _ui.RunElevated(); return Task.CompletedTask; });
         }
@@ -151,7 +156,23 @@ namespace ExplorerManager.Presentation
             get => _selectedRecovery;
             set { if (Set(ref _selectedRecovery, value) && value?.Path != null) { int at = value.Path.LastIndexOf('\\'); RecoveryFolder = at > 0 ? value.Path.Substring(0, at) : value.Path; } }
         }
-        public AppSettings Settings { get => _settings; private set => Set(ref _settings, value); }
+        public AppSettings Settings
+        {
+            get => _settings;
+            private set { if (Set(ref _settings, value)) Changed(nameof(CacheCapacityMiB)); }
+        }
+        public int CacheCapacityMiB
+        {
+            get => checked((int)(Settings.CacheBytes / 1048576L));
+            set
+            {
+                long bytes = value * 1048576L;
+                if (bytes < AppSettings.MinimumCacheBytes || bytes > AppSettings.MaximumCacheBytes)
+                    throw new ArgumentOutOfRangeException(nameof(value), "RAM 한도는 1~16,384 MiB 정수로 입력하세요.");
+                if (Settings.CacheBytes == bytes) return;
+                Settings.CacheBytes = bytes; Changed();
+            }
+        }
         public AsyncCommand RefreshCommand { get; }
         public AsyncCommand NewCommand { get; }
         public AsyncCommand SaveCommand { get; }
@@ -178,6 +199,8 @@ namespace ExplorerManager.Presentation
         public async Task RefreshAsync(bool discardPolicyChanges = false)
         {
             if (_refreshing) return; _refreshing = true;
+            var finished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _refreshFinished = finished;
             try
             {
                 var state = await _client.SendAsync<Dashboard>("Dashboard");
@@ -206,9 +229,13 @@ namespace ExplorerManager.Presentation
                 Append(WriteSeries, state.Metrics.FirstOrDefault(x => x.Entity == SelectedDisk && x.Name == "WriteBytes" && DisplayText.HasValue(x))?.Value);
                 Append(LatencySeries, state.Metrics.Where(x => x.Entity == SelectedDisk && (x.Name == "ReadLatency" || x.Name == "WriteLatency") && DisplayText.HasValue(x)).Select(x => x.Value).DefaultIfEmpty(null).Max());
                 NotifyDashboard();
-                if (!_historyLoaded)
+                if (!_settingsLoaded)
                 {
                     Settings = await _client.SendAsync<AppSettings>("Settings"); AllowedApps = string.Join(Environment.NewLine, Settings.AllowedProcessNames);
+                    _settingsLoaded = true;
+                }
+                if (!_historyLoaded)
+                {
                     await LoadHistoryAsync(); _historyLoaded = true; Message = "준비되었습니다. 정책 저장 후 미리보기를 실행하세요.";
                 }
                 var newAlarm = state.Alerts.FirstOrDefault(a => !a.Acknowledged && a.Category == "LockedFile" && !_seen.Contains(a.Id));
@@ -233,7 +260,7 @@ namespace ExplorerManager.Presentation
                 Status = "서비스 연결/조회 실패 · 관리자 실행과 서비스 상태를 확인하세요."; Message = ex.Message;
                 NotifyDashboard();
             }
-            finally { _refreshing = false; }
+            finally { _refreshing = false; finished.TrySetResult(true); }
         }
         private async Task SavePolicyAsync()
         {
@@ -242,7 +269,7 @@ namespace ExplorerManager.Presentation
             var p = SelectedPolicy.ToPolicy(); var errors = PolicyRules.Validate(p);
             if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
             if (p.Enabled && !await _ui.ConfirmAsync("자동 삭제 활성화", "등록 경로:\n" + string.Join("\n", p.Roots) +
-                "\n\n보관 기간이 지난 파일을 폴더 단위로 자동 정리합니다. 목표 용량에 도달해도 현재 폴더의 삭제 가능 항목까지 처리합니다. 복구 캐시는 전체 1GiB이며 이전 복구본은 퇴출될 수 있습니다.\n미리보기 결과와 경로를 확인하셨습니까?")) return;
+                "\n\n보관 기간이 지난 파일을 폴더 단위로 자동 정리합니다. 목표 용량에 도달해도 현재 폴더의 삭제 가능 항목까지 처리합니다. 복구 캐시는 설정된 RAM 한도 내에서만 보관되며 이전 복구본은 퇴출될 수 있습니다.\n미리보기 결과와 경로를 확인하셨습니까?")) return;
             await _client.SendAsync<DrivePolicy>("SavePolicy", p); Message = "정책을 저장했습니다."; await RefreshAsync(true);
         }
         private async Task StartAsync(bool preview)

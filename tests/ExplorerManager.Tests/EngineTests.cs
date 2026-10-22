@@ -148,6 +148,24 @@ namespace ExplorerManager.Tests
                 Assert.Throws<InvalidOperationException>(() => f.Store.RequestReceipt("sid", "id", "other"));
             }
         }
+        [Fact] public void SettingsAndAuditAreCommittedTogether()
+        {
+            using (var f = new Fixture())
+            {
+                f.Store.SaveSettings(new AppSettings { CacheBytes = 256L * 1048576 }, "test-operator");
+                using (var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + Path.Combine(f.DirectoryPath, "test.db") + ";Pooling=False"))
+                {
+                    connection.Open();
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "CREATE TRIGGER fail_settings_audit BEFORE INSERT ON events WHEN NEW.action='SettingsChanged' BEGIN SELECT RAISE(ABORT,'audit unavailable'); END";
+                        command.ExecuteNonQuery();
+                    }
+                    Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => f.Store.SaveSettings(new AppSettings { CacheBytes = 512L * 1048576 }, "test-operator"));
+                    Assert.Equal(256L * 1048576, f.Store.Settings().CacheBytes);
+                }
+            }
+        }
         [Fact] public async Task FolderSummariesDoNotDoubleCountChildren()
         {
             using (var f = new Fixture())

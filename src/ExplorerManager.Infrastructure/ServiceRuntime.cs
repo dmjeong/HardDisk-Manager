@@ -81,6 +81,7 @@ namespace ExplorerManager.Infrastructure
             if (current == null || current.Version != p.Version) return "PolicyChanged";
             if (_monitor.LoadStopReason != null) return _monitor.LoadStopReason;
             var settings = _store.Settings();
+            if (settings.CacheBytes != _cache.Capacity) return "AuditUnavailable";
             if (settings.PauseOnHealthCritical)
             {
                 var volume = _volumes.Get(p.VolumeId);
@@ -196,8 +197,25 @@ namespace ExplorerManager.Infrastructure
                 case "Settings": return _store.Settings();
                 case "SaveSettings":
                     var settings = d.ToObject<AppSettings>(); ValidateSettings(settings);
-                    if (settings.CacheBytes != _cache.Capacity) throw new ArgumentException("실행 중 캐시 크기를 변경할 수 없습니다. 서비스 중지 후 설정 마이그레이션이 필요합니다.");
-                    _store.SaveSettings(settings); _store.RecordEvent("SettingsChanged", caller.Sid, "", ""); return true;
+                    lock (_sync)
+                    {
+                        if (settings.CacheBytes == _cache.Capacity) _store.SaveSettings(settings, caller.Sid);
+                        else
+                        {
+                            if (_busy) throw new InvalidOperationException("현재 작업이 진행 중입니다. 완료하거나 취소한 뒤 RAM 보관 용량을 변경하세요.");
+                            try { _cache.Resize(settings.CacheBytes, () => _store.SaveSettings(settings, caller.Sid)); }
+                            catch
+                            {
+                                try
+                                {
+                                    if (_store.Settings().CacheBytes != _cache.Capacity) _health = "AuditUnavailable: 복구 캐시 설정 적용이 완료되지 않았습니다. 서비스를 다시 시작하세요.";
+                                }
+                                catch { _health = "AuditUnavailable: 복구 캐시 설정 상태를 확인할 수 없습니다."; }
+                                throw;
+                            }
+                        }
+                    }
+                    return true;
                 case "Restore":
                     string cacheId = Required(d, "Id"); string directory = (string)d["Directory"];
                     var entry = _cache.List().FirstOrDefault(x => x.Id == cacheId) ?? throw new InvalidOperationException("복구본이 퇴출되었습니다.");
@@ -276,7 +294,9 @@ namespace ExplorerManager.Infrastructure
         { string value = (string)data[field]; if (string.IsNullOrWhiteSpace(value) || value.Length > 32000) throw new ArgumentException(field + " 값이 잘못되었습니다."); return value; }
         private static void ValidateSettings(AppSettings s)
         {
-            if (s == null || s.CacheBytes < 1048576 || s.CacheBytes > 1073741824 || s.HistoryDays < 1 || s.HistoryDays > 3650 ||
+            if (s == null || s.CacheBytes < AppSettings.MinimumCacheBytes || s.CacheBytes > AppSettings.MaximumCacheBytes)
+                throw new ArgumentException("RAM 보관 용량은 1~16384 MiB 범위입니다.");
+            if (s.HistoryDays < 1 || s.HistoryDays > 3650 ||
                 s.HistoryMaxBytes < 10485760 || s.HistoryMaxBytes > 100L * 1073741824 || s.AnomalyDurationSeconds < 10 || s.AnomalyDurationSeconds > 3600 ||
                 s.CpuWarningPercent < 1 || s.CpuWarningPercent > 100 || !Finite(s.CpuWarningPercent) ||
                 !Finite(s.CpuTemperatureWarning) || s.CpuTemperatureWarning < 1 || s.CpuTemperatureWarning > 150 ||
