@@ -65,7 +65,7 @@ Dashboard의 Interlocks는 각 조건의 Clear/Pending/Tripped/Recovering/Awaiti
 
 Recovery delay(기본60초)는 안전한 측정이 연속으로 유지되어야 하는 시간입니다. 수동 Reset 옵션이 켜져 있으면 AwaitingReset에서 운영자가 Reset interlocks를 실행합니다. Pending 위험, 아직 진행 중인 위험, 회복 대기, 트립 후 미지원/누락 측정은 Reset할 수 없습니다. 래치는 서비스 재시작에도 유지됩니다. Pause는 별개이며 Reset은 Pause를 해제하지 않고 Resume는 리소스/프로세스/디스크 차단을 해제하지 않습니다.
 
-감사 오류는 원인을 해결하고 Reset할 때 실제 감사 기록 쓰기를 검증합니다. 저장된 캐시 크기와 실행 크기가 다르면 Reset도 거부하고 서비스 재시작을 요구합니다. Critical 디스크 알림은 별도로 원인을 확인한 뒤 Acknowledge하며 실제 위험 측정이 남으면 계속 차단됩니다. InterlockTripped/InterlockCleared/InterlocksReset 전이는 감사 DB에 기록합니다. 현재 폴더 완료 규칙보다 Interlock이 우선하며 진행 중인 RAM 복사는 취소하고 원본을 보존합니다.
+감사 오류는 원인을 해결하고 Reset할 때 실제 감사 기록 쓰기를 검증합니다. 저장된 캐시 크기와 실행 크기가 다르면 Reset도 거부하고 서비스 재시작을 요구합니다. Critical 디스크 알림은 별도로 원인을 확인한 뒤 Acknowledge하며 실제 위험 측정이 남으면 계속 차단됩니다. InterlockTripped/InterlockCleared/InterlocksReset 전이는 감사 DB에 기록합니다. 현재 폴더 완료 규칙보다 Interlock이 우선하며 진행 중인 RAM 복사는 취소하고 원본을 보존합니다. 차단으로 끝난 작업은 그 자리에서 자동 재개하지 않으며, 조건 해소 후 정책 점검 주기·쿨다운에 따라 새 작업으로 스캔합니다.
 
 앱 차단 목록은 실행 파일 이름(.exe)으로 입력합니다. 해당 이름의 프로세스가 하나라도 실행 중이면 차단하고 상태 조회 실패도 차단합니다. 프로세스를 종료하지는 않습니다. 외부 PLC/설비 프로토콜은 연결 사양을 정의하지 않았으며 현재 기능은 서비스 내부 리소스·앱 조건입니다.
 
