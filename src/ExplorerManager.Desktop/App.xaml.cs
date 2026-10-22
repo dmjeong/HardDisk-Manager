@@ -95,26 +95,44 @@ namespace ExplorerManager.Desktop
         }
         private async System.Threading.Tasks.Task CaptureSectionsAsync(MainWindow window, string screenshot, int width, int height)
         {
-            // Hosted runners may have a smaller desktop. Render the real WPF client at
-            // explicit layout sizes, independent of the native window's screen clamp.
+            // Detach the real view from the runner's constrained HWND while rendering.
+            // A measured off-screen visual also paints the application's canvas background.
             var root = window.Sections;
+            root.DataContext = window.DataContext;
+            root.FontFamily = window.FontFamily; root.FontSize = window.FontSize;
+            root.UseLayoutRounding = true;
+            window.Content = null;
             root.Width = width; root.Height = height;
+            var host = new System.Windows.Controls.Border
+            {
+                Width = width, Height = height, Background = (Brush)FindResource("CanvasBrush"), Child = root
+            };
             try
             {
                 for (int index = 0; index < root.Items.Count; index++)
                 {
                     root.SelectedIndex = index;
-                    await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
-                    root.Measure(new Size(width, height)); root.Arrange(new Rect(0, 0, width, height)); root.UpdateLayout();
+                    await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                    host.Measure(new Size(width, height)); host.Arrange(new Rect(0, 0, width, height)); host.UpdateLayout();
                     if (Math.Abs(root.ActualWidth - width) > 1 || Math.Abs(root.ActualHeight - height) > 1)
                         throw new InvalidOperationException("WPF capture did not use the requested layout size.");
                     string path = index == 0 ? screenshot : Path.Combine(Path.GetDirectoryName(screenshot),
                         Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
-                    Capture(root, path);
+                    Capture(host, path);
                 }
             }
-            finally { root.ClearValue(FrameworkElement.WidthProperty); root.ClearValue(FrameworkElement.HeightProperty); }
+            finally
+            {
+                host.Child = null;
+                root.ClearValue(FrameworkElement.WidthProperty); root.ClearValue(FrameworkElement.HeightProperty);
+                root.ClearValue(FrameworkElement.DataContextProperty);
+                root.ClearValue(System.Windows.Controls.Control.FontFamilyProperty);
+                root.ClearValue(System.Windows.Controls.Control.FontSizeProperty);
+                root.ClearValue(FrameworkElement.UseLayoutRoundingProperty);
+                window.Content = root;
+            }
         }
+
         private static void Capture(FrameworkElement window, string path)
         {
             var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
