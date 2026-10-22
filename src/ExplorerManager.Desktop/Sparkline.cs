@@ -48,12 +48,12 @@ namespace ExplorerManager.Desktop
                 dc.DrawText(label, new Point(Math.Max(0, left - label.Width - 8), y - label.Height / 2));
             }
             var unit = Label(Unit ?? ""); dc.DrawText(unit, new Point(right - unit.Width, 0));
-            var previous = Label(values.Length > 1 ? "−" + (values.Length - 1) + " 표본" : "이전");
+            var previous = Label(values.Length > 1 ? "−" + (values.Length - 1) + " samples" : "Earlier");
             dc.DrawText(previous, new Point(left, bottom + 8));
-            var now = Label("현재"); dc.DrawText(now, new Point(right - now.Width, bottom + 8));
+            var now = Label("Now"); dc.DrawText(now, new Point(right - now.Width, bottom + 8));
             if (valid.Length == 0)
             {
-                var waiting = Label("측정 표본 대기 중"); dc.DrawText(waiting, new Point(left + (width - waiting.Width) / 2, top + height / 2 - waiting.Height / 2)); return;
+                var waiting = Label("Waiting for samples"); dc.DrawText(waiting, new Point(left + (width - waiting.Width) / 2, top + height / 2 - waiting.Height / 2)); return;
             }
             Point Position(int index) => new Point(left + index * width / Math.Max(1, values.Length - 1), bottom - Math.Max(0, Math.Min(max, values[index])) * height / max);
             var geometry = new StreamGeometry();

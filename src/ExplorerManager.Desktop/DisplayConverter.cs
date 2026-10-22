@@ -24,28 +24,28 @@ namespace ExplorerManager.Desktop
                 case "Enum":
                     switch (value?.ToString())
                     {
-                        case "UsedPercent": return "사용률 (%)";
-                        case "UsedBytes": return "사용 용량 (bytes)";
-                        case "FreeBytes": return "여유 용량 (bytes)";
-                        case "LastWriteTime": return "마지막 수정 시각";
-                        case "CreationTime": return "생성 시각";
+                        case "UsedPercent": return "Used (%)";
+                        case "UsedBytes": return "Used (bytes)";
+                        case "FreeBytes": return "Free (bytes)";
+                        case "LastWriteTime": return "Last modified";
+                        case "CreationTime": return "Created";
                         default: return value?.ToString() ?? "";
                     }
                 case "MetricName":
                     switch (value as string)
                     {
-                        case "CPU": return "CPU 사용률";
-                        case "Temperature": return "온도";
-                        case "AvailableRAM": return "사용 가능 메모리";
-                        case "UsedRAM": return "사용 메모리";
-                        case "ReadBytes": return "읽기 속도";
-                        case "WriteBytes": return "쓰기 속도";
-                        case "ReadLatency": return "읽기 지연";
-                        case "WriteLatency": return "쓰기 지연";
-                        case "Queue": return "디스크 대기열";
-                        case "Reads": return "초당 읽기 작업";
-                        case "Writes": return "초당 쓰기 작업";
-                        case "StalledIO": return "I/O 정체";
+                        case "CPU": return "CPU usage";
+                        case "Temperature": return "Temperature";
+                        case "AvailableRAM": return "Available RAM";
+                        case "UsedRAM": return "Used RAM";
+                        case "ReadBytes": return "Read throughput";
+                        case "WriteBytes": return "Write throughput";
+                        case "ReadLatency": return "Read latency";
+                        case "WriteLatency": return "Write latency";
+                        case "Queue": return "Queue length";
+                        case "Reads": return "Read IOPS";
+                        case "Writes": return "Write IOPS";
+                        case "StalledIO": return "Stalled I/O";
                         default: return value;
                     }
                 default: return value;

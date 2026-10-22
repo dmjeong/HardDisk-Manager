@@ -28,3 +28,10 @@
 - CPU와 디스크 차트는 데이터가 없는 구간을 연결하지 않고 측정 대기를 표시한다. 디스크 자동 축은 단위와 상한을 표시한다.
 - 경로는 줄임표와 전체 경로 툴팁, 표는 가상화와 가로 스크롤 유지.
 - 위험 작업은 기존 확인 절차와 서비스 측 안전 검증을 유지한다.
+
+## UI 문구 원칙
+- 메뉴는 Dashboard / Policies / History / Recovery / Monitoring / Alerts / Settings로 통일한다.
+- CPU usage, Read/Write throughput, I/O latency, Recovery cache, Preview, Refresh 등 기술 용어와 짧은 UI 레이블은 영어가 자연스러우면 영어를 사용한다. 설명·빈 상태·삭제/복구/강제 종료 확인 문장은 한국어로 명확하게 작성한다.
+- 문장형 대소문자(sentence case)를 사용한다. 사용자 지정 정책 이름과 경로는 번역하지 않는다.
+- Enabled policies는 저장된 활성화 설정, Pending alerts는 미확인 상태를 뜻한다. Free space Δ는 외부 I/O도 반영하는 여유 공간 순변화로 실제 확보 용량과 같다고 표현하지 않는다.
+- I/O latency는 읽기·쓰기 평균 지연 중 큰 값이며 개별 I/O의 최대 지연으로 표현하지 않는다. RAM cache는 Recycle Bin이나 영구 Backup으로 부르지 않는다.

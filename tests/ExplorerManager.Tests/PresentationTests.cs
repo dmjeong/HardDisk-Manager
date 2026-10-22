@@ -54,7 +54,7 @@ namespace ExplorerManager.Tests
             var row = new VolumeRow(new VolumeStatus { Id = "v", Mount = "D:\\", Label = "영상", TotalBytes = 1000000000, FreeBytes = 250000000 });
             var changed = new List<string>(); row.PropertyChanged += (sender, args) => changed.Add(args.PropertyName);
             Assert.Equal("D:  영상", row.Title); Assert.Equal("1 GB", row.CapacityText);
-            Assert.Equal("250 MB", row.FreeText); Assert.Equal("750 MB", row.UsedText); Assert.Equal("75% 사용", row.UsageText);
+            Assert.Equal("250 MB", row.FreeText); Assert.Equal("750 MB", row.UsedText); Assert.Equal("75% used", row.UsageText);
             row.Apply(new VolumeStatus { Id = "v", Mount = "D:\\", State = "Offline / IdentityMismatch", TotalBytes = 1000000000, FreeBytes = 250000000 });
             Assert.False(row.HasCapacity); Assert.Equal("확인 불가", row.FreeText); Assert.Equal("—", row.UsedPercentText);
             Assert.Contains("연결 끊김", row.StateText); Assert.Contains(nameof(VolumeRow.FreeText), changed); Assert.Contains(nameof(VolumeRow.HasCapacity), changed);

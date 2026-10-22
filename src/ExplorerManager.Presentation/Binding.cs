@@ -121,8 +121,8 @@ namespace ExplorerManager.Presentation
         public string FreeText => HasCapacity ? DisplayText.Bytes(FreeBytes) : "확인 불가";
         public string UsedText => HasCapacity ? DisplayText.Bytes(TotalBytes - FreeBytes) : "확인 불가";
         public string UsedPercentText => HasCapacity ? UsedPercent.ToString("0.#", CultureInfo.InvariantCulture) + "%" : "—";
-        public string UsageText => HasCapacity ? UsedPercentText + " 사용" : StateText;
-        public string Summary => Title + " · " + (HasCapacity ? UsedPercentText + " 사용 / 여유 " + FreeText : StateText);
+        public string UsageText => HasCapacity ? UsedPercentText + " used" : StateText;
+        public string Summary => Title + " · " + (HasCapacity ? UsedPercentText + " used / " + FreeText + " free" : StateText);
         public void Apply(VolumeStatus value)
         {
             _value = value;
