@@ -18,7 +18,7 @@ namespace ExplorerManager.Application
         void SaveRun(RunRecord run);
         void RecordItem(ItemRecord item);
         void AddCandidate(string runId, FileSnapshot file);
-        FileSnapshot TakeNextCandidate(string runId);
+        FileSnapshot TakeNextCandidate(string runId, string cleanupUnit = null);
         void ClearCandidates(string runId);
         void SetCandidateTotals(RunRecord run);
         void SaveAlert(AlertRecord alert);

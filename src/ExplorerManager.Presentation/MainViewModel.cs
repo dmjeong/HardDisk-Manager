@@ -242,7 +242,7 @@ namespace ExplorerManager.Presentation
             var p = SelectedPolicy.ToPolicy(); var errors = PolicyRules.Validate(p);
             if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
             if (p.Enabled && !await _ui.ConfirmAsync("자동 삭제 활성화", "등록 경로:\n" + string.Join("\n", p.Roots) +
-                "\n\n보관 기간이 지난 파일을 자동 삭제합니다. 복구 캐시는 전체 1GiB이며 이전 복구본은 퇴출될 수 있습니다.\n미리보기 결과와 경로를 확인하셨습니까?")) return;
+                "\n\n보관 기간이 지난 파일을 폴더 단위로 자동 정리합니다. 목표 용량에 도달해도 현재 폴더의 삭제 가능 항목까지 처리합니다. 복구 캐시는 전체 1GiB이며 이전 복구본은 퇴출될 수 있습니다.\n미리보기 결과와 경로를 확인하셨습니까?")) return;
             await _client.SendAsync<DrivePolicy>("SavePolicy", p); Message = "정책을 저장했습니다."; await RefreshAsync(true);
         }
         private async Task StartAsync(bool preview)

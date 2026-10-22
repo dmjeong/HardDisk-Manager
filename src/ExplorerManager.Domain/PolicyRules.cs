@@ -43,6 +43,33 @@ namespace ExplorerManager.Domain
         public static bool IsExpired(FileSnapshot f, DrivePolicy p, DateTime cutoff) =>
             (p.AgeBasis == AgeBasis.CreationTime ? f.CreationUtc : f.LastWriteUtc) < cutoff;
 
+        // A folder directly below a managed root, including its descendants, is one cleanup unit.
+        // Loose files remain independent. This does not replace native path/identity verification.
+        public static string CleanupUnitPath(FileSnapshot file)
+        {
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            string path = NormalizeCleanupPath(file.Path, nameof(file.Path));
+            string root = NormalizeCleanupPath(file.Root, nameof(file.Root));
+            string prefix = root + "\\";
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("정리 후보는 관리 경로 자체가 아닌 하위 경로여야 합니다.", nameof(file));
+            int separator = path.IndexOf('\\', prefix.Length);
+            return separator < 0 ? path : path.Substring(0, separator);
+        }
+
+        private static string NormalizeCleanupPath(string value, string parameter)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("정리 후보 경로가 없습니다.", parameter);
+            string path = value.Replace('/', '\\').TrimEnd('\\');
+            if (path.Length == 0) throw new ArgumentException("정리 후보 경로가 없습니다.", parameter);
+            int begin = path.StartsWith("\\\\", StringComparison.Ordinal) ? 2 : 0;
+            if (path.IndexOf("\\\\", begin, StringComparison.Ordinal) >= 0)
+                throw new ArgumentException("정리 후보 경로의 구분자가 잘못되었습니다.", parameter);
+            foreach (string part in path.Split('\\'))
+                if (part == "." || part == "..") throw new ArgumentException("상대 경로 구간을 정리 단위로 사용할 수 없습니다.", parameter);
+            return path;
+        }
+
         public static bool InWindow(DrivePolicy p, DateTime localNow)
         {
             int h = localNow.Hour;

@@ -32,8 +32,9 @@ namespace ExplorerManager.Infrastructure
             using (var setup = _scan.CreateCommand())
             {
                 setup.CommandText = @"PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF;
-CREATE TABLE IF NOT EXISTS candidates (runid TEXT NOT NULL, path TEXT NOT NULL, age TEXT NOT NULL, bytes INTEGER NOT NULL, processed INTEGER NOT NULL DEFAULT 0, json TEXT NOT NULL, PRIMARY KEY(runid,path));
-CREATE INDEX IF NOT EXISTS candidates_next ON candidates(runid,processed,age,path);";
+CREATE TABLE IF NOT EXISTS candidates (runid TEXT NOT NULL, path TEXT NOT NULL, age TEXT NOT NULL, bytes INTEGER NOT NULL, processed INTEGER NOT NULL DEFAULT 0, json TEXT NOT NULL, unit TEXT NOT NULL, PRIMARY KEY(runid,path));
+CREATE INDEX IF NOT EXISTS candidates_next ON candidates(runid,processed,age,path);
+CREATE INDEX IF NOT EXISTS candidates_unit ON candidates(runid,processed,unit,age,path);";
                 setup.ExecuteNonQuery();
             }
             using (var cmd = _db.CreateCommand())
@@ -127,18 +128,23 @@ PRAGMA user_version=1;";
         }
         public void AddCandidate(string runId, FileSnapshot f)
         {
-            lock (_sync) Exec("INSERT OR IGNORE INTO candidates(runid,path,age,bytes,json) VALUES($0,$1,$2,$3,$4)",
-                runId, f.Path, f.AgeUtc.ToString("O"), f.Length, Json(f));
+            string unit = CandidateUnitKey(PolicyRules.CleanupUnitPath(f));
+            lock (_sync) Exec("INSERT OR IGNORE INTO candidates(runid,path,age,bytes,json,unit) VALUES($0,$1,$2,$3,$4,$5)",
+                runId, f.Path, f.AgeUtc.ToString("O"), f.Length, Json(f), unit);
         }
-        public FileSnapshot TakeNextCandidate(string runId)
+        public FileSnapshot TakeNextCandidate(string runId, string cleanupUnit = null)
         {
             lock (_sync)
             {
-                var f = Read<FileSnapshot>("SELECT json FROM candidates WHERE runid=$0 AND processed=0 ORDER BY age,path LIMIT 1", runId).FirstOrDefault();
+                var f = cleanupUnit == null
+                    ? Read<FileSnapshot>("SELECT json FROM candidates WHERE runid=$0 AND processed=0 ORDER BY age,path LIMIT 1", runId).FirstOrDefault()
+                    : Read<FileSnapshot>("SELECT json FROM candidates WHERE runid=$0 AND processed=0 AND unit=$1 ORDER BY age,path LIMIT 1",
+                        runId, CandidateUnitKey(cleanupUnit)).FirstOrDefault();
                 if (f != null) Exec("UPDATE candidates SET processed=1 WHERE runid=$0 AND path=$1", runId, f.Path);
                 return f;
             }
         }
+        private static string CandidateUnitKey(string path) => path.Replace('/', '\\').TrimEnd('\\').ToUpperInvariant();
         public void SetCandidateTotals(RunRecord run)
         {
             lock (_sync)

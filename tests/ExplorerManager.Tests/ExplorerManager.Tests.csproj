@@ -13,7 +13,9 @@
   <ItemGroup>
     <Compile Include="ArchitectureTests.cs" />
     <Compile Include="CacheTests.cs" />
+    <Compile Include="CandidateQueueTests.cs" />
     <Compile Include="EngineTests.cs" />
+    <Compile Include="FolderCleanupWindowsTests.cs" />
     <Compile Include="PolicyTests.cs" />
     <Compile Include="PresentationTests.cs" />
     <Compile Include="WindowsSafetyTests.cs" />

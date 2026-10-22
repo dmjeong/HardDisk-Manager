@@ -24,11 +24,13 @@ namespace ExplorerManager.Tests
         public long Free = 100;
         public bool ScanTimeout;
         public string Gate;
+        public Action<FileSnapshot> AfterDelete;
+        public Func<FileSnapshot, FileSnapshot> EmptyParent;
         public Fixture() { Directory.CreateDirectory(DirectoryPath); Store = new SqliteJournal(Path.Combine(DirectoryPath, "test.db")); Cache = new RecoveryCache(1024 * 1024, Store.SetRecoveryState); }
         public CleanupEngine Engine(IJournal journal = null, IRecoveryCache cache = null) => new CleanupEngine(this, this, journal ?? Store, cache ?? Cache, this, this, this);
         public FileSnapshot Add(string path, int days, int length = 60)
         {
-            var f = new FileSnapshot { Path = path, Root = "D:\\a", VolumeId = "volume", FileId = Guid.NewGuid().ToString(), Length = length,
+            var f = new FileSnapshot { Path = path, Root = Policy.Roots.First(x => path.StartsWith(x + "\\", StringComparison.OrdinalIgnoreCase)), ParentPath = Path.GetDirectoryName(path), VolumeId = "volume", FileId = Guid.NewGuid().ToString(), Length = length,
                 LastWriteUtc = UtcNow.AddDays(-days), CreationUtc = UtcNow.AddDays(-days), AgeUtc = UtcNow.AddDays(-days) };
             Files.Add(f); return f;
         }
@@ -42,7 +44,7 @@ namespace ExplorerManager.Tests
         public IFileLease OpenVerified(FileSnapshot f, DrivePolicy p)
         { if (Locked.Contains(f.Path)) throw new Win32Exception(32); return new Lease(this, f); }
         public bool IsAbsent(FileSnapshot f) => Deleted.Contains(f.Path);
-        public FileSnapshot FindEmptyParent(FileSnapshot d, DrivePolicy p, DateTime c) => null;
+        public FileSnapshot FindEmptyParent(FileSnapshot d, DrivePolicy p, DateTime c) => EmptyParent?.Invoke(d);
         public Task<FileSnapshot> RestoreAsync(FileSnapshot original, Stream input, string hash, string target, CancellationToken c) => Task.FromResult(original);
         private sealed class Lease : IFileLease
         {
@@ -50,14 +52,14 @@ namespace ExplorerManager.Tests
             public Lease(Fixture f, FileSnapshot snapshot) { _f = f; Snapshot = snapshot; Content = new MemoryStream(new byte[snapshot.Length]); }
             public FileSnapshot Snapshot { get; }
             public Stream Content { get; }
-            public void MarkForDeletion() { _f.Deleted.Add(Snapshot.Path); _f.Free += Snapshot.Length; }
+            public void MarkForDeletion() { _f.Deleted.Add(Snapshot.Path); _f.Free += Snapshot.Length; _f.AfterDelete?.Invoke(Snapshot); }
             public void Dispose() => Content.Dispose();
         }
         public void Dispose() { Cache.Dispose(); Store.Dispose(); Directory.Delete(DirectoryPath, true); }
     }
     public sealed class EngineTests
     {
-        [Fact] public async Task GlobalOldestOrderAndStopAfterEachFile()
+        [Fact] public async Task LooseFilesKeepGlobalOldestOrderAndStopBetweenFiles()
         {
             using (var f = new Fixture())
             {
@@ -175,6 +177,156 @@ namespace ExplorerManager.Tests
                 Assert.Empty(f.Deleted); Assert.Equal(0, f.Cache.Used);
             }
         }
+        [Fact] public async Task FinishesActiveFolderAfterTargetAndKeepsInterleavedNextFolder()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80, 120);
+                f.Add(@"D:\a\other\middle", 70);
+                f.Add(@"D:\a\batch\nested\second", 60);
+                f.Add(@"D:\a\batch\last", 40);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(new[] { @"D:\a\batch\first", @"D:\a\batch\nested\second", @"D:\a\batch\last" }, f.Deleted);
+                Assert.Equal("TargetReached", run.State); Assert.Equal(240, run.DeletedBytes);
+            }
+        }
+        [Fact] public async Task TargetObservedInFolderStaysLatchedWhenExternalWriterConsumesSpace()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\other\middle", 70); f.Add(@"D:\a\batch\last", 40);
+                f.AfterDelete = file => { if (file.Path.EndsWith("last")) f.Free = 0; };
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(2, f.Deleted.Count); Assert.DoesNotContain(@"D:\a\other\middle", f.Deleted);
+                Assert.Equal("TargetReached", run.State); Assert.Equal(-100, run.ObservedFreeDelta);
+            }
+        }
+        [Fact] public async Task TargetDuringLaterCaptureDoesNotInterruptStartedFolder()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80); f.Add(@"D:\a\other\middle", 70);
+                f.Add(@"D:\a\batch\second", 60); f.Add(@"D:\a\batch\last", 40);
+                int captures = 0;
+                var wrapped = new AfterCaptureCache(f.Cache, () => { if (++captures == 2) f.Free = 500; });
+                var run = await f.Engine(cache: wrapped).RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(3, f.Deleted.Count); Assert.DoesNotContain(@"D:\a\other\middle", f.Deleted);
+                Assert.Equal("TargetReached", run.State);
+            }
+        }
+        [Fact] public async Task TargetDuringFirstFolderCapturePreventsStartingDeletion()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80); f.Add(@"D:\a\batch\last", 40);
+                var wrapped = new AfterCaptureCache(f.Cache, () => f.Free = 500);
+                var run = await f.Engine(cache: wrapped).RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Empty(f.Deleted); Assert.Empty(f.Cache.List()); Assert.Equal("TargetReached", run.State);
+            }
+        }
+        [Fact] public async Task NewlyEmptyAncestorsStayInActiveFolderAfterTarget()
+        {
+            using (var f = new Fixture())
+            {
+                var child = f.Add(@"D:\a\batch\nested\file", 80, 120);
+                f.Add(@"D:\a\other\middle", 70);
+                var nested = new FileSnapshot { Path = @"D:\a\batch\nested", Root = @"D:\a", IsDirectory = true,
+                    FileId = "nested", AgeUtc = child.AgeUtc, LastWriteUtc = child.LastWriteUtc, CreationUtc = child.CreationUtc };
+                var parent = new FileSnapshot { Path = @"D:\a\batch", Root = @"D:\a", IsDirectory = true,
+                    FileId = "batch", AgeUtc = child.AgeUtc, LastWriteUtc = child.LastWriteUtc, CreationUtc = child.CreationUtc };
+                f.EmptyParent = file => file.Path == child.Path ? nested : file.Path == nested.Path ? parent : null;
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(new[] { child.Path, nested.Path, parent.Path }, f.Deleted);
+                Assert.Equal(2, run.DeletedDirectories); Assert.Equal("TargetReached", run.State);
+            }
+        }
+        [Fact] public async Task ExactPathRetryNeverDeletesSiblingOrEmptyAncestor()
+        {
+            using (var f = new Fixture())
+            {
+                f.Policy.StopThreshold = 0;
+                f.Add(@"D:\a\batch\sibling", 80); var retry = f.Add(@"D:\a\batch\nested\retry", 60);
+                f.EmptyParent = file => throw new InvalidOperationException("Exact retry must not inspect parents");
+                await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None, retry.Path);
+                Assert.Equal(new[] { retry.Path }, f.Deleted);
+            }
+        }
+        [Fact] public async Task ActiveFolderKeepsLockedRecentProtectedAndOversizeChildren()
+        {
+            using (var f = new Fixture())
+            {
+                var first = f.Add(@"D:\a\batch\first", 90, 120);
+                var locked = f.Add(@"D:\a\batch\locked", 80); f.Locked.Add(locked.Path);
+                f.Add(@"D:\a\batch\recent", 1);
+                var restored = f.Add(@"D:\a\batch\restored", 70); f.Store.Protect(restored, f.UtcNow.AddDays(1));
+                f.Add(@"D:\a\batch\huge", 60, 2000000);
+                var last = f.Add(@"D:\a\batch\last", 40); f.Add(@"D:\a\other\middle", 50);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(new[] { first.Path, last.Path }, f.Deleted); Assert.Equal(4, run.Skipped);
+                Assert.Single(f.Store.Alerts()); Assert.Equal("TargetReached", run.State);
+            }
+        }
+        [Fact] public async Task HealthGateAfterCaptureInterruptsActiveFolderImmediately()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\batch\last", 40);
+                int captures = 0;
+                var wrapped = new AfterCaptureCache(f.Cache, () => { if (++captures == 2) f.Gate = "PausedByHealth"; });
+                var run = await f.Engine(cache: wrapped).RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Single(f.Deleted); Assert.Single(f.Cache.List()); Assert.Equal("PausedByHealth", run.State);
+            }
+        }
+        [Fact] public async Task CancellationInterruptsActiveFolderImmediately()
+        {
+            using (var f = new Fixture())
+            using (var cancellation = new CancellationTokenSource())
+            {
+                f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\batch\last", 40);
+                f.AfterDelete = file => cancellation.Cancel();
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", cancellation.Token);
+                Assert.Single(f.Deleted); Assert.Equal("UserCancelled", run.State);
+            }
+        }
+        [Fact] public async Task ItemLimitInterruptsActiveFolderImmediately()
+        {
+            using (var f = new Fixture())
+            {
+                f.Policy.MaxItems = 1; f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\batch\last", 40);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Single(f.Deleted); Assert.Equal("LimitReached", run.State);
+            }
+        }
+        [Fact] public async Task RunTimeLimitIsRecheckedAfterCaptureInsideActiveFolder()
+        {
+            using (var f = new Fixture())
+            {
+                f.Policy.MaxRunSeconds = 1; f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\batch\last", 40);
+                int captures = 0;
+                var wrapped = new AfterCaptureCache(f.Cache, () => { if (++captures == 2) Thread.Sleep(1100); });
+                var run = await f.Engine(cache: wrapped).RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Single(f.Deleted); Assert.Single(f.Cache.List()); Assert.Equal("LimitReached", run.State);
+            }
+        }
+        [Fact] public async Task MissingExactPathRetryDoesNotSweepOtherFiles()
+        {
+            using (var f = new Fixture())
+            {
+                f.Add(@"D:\a\batch\first", 80); f.Add(@"D:\a\batch\last", 40);
+                await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None, @"D:\a\batch\missing");
+                Assert.Empty(f.Deleted); Assert.Empty(f.Cache.List());
+            }
+        }
+        [Fact] public async Task ByteLimitStillProtectsRemainingChildrenAfterTarget()
+        {
+            using (var f = new Fixture())
+            {
+                f.Policy.MaxDeleteBytes = 120; f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\batch\last", 40);
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Single(f.Deleted); Assert.Equal(1, run.Skipped); Assert.Equal("TargetReached", run.State);
+                Assert.Equal("BatchByteLimit", f.Store.History(null, 0).Items.Single(x => x.State == "Skipped").Reason);
+            }
+        }
         private sealed class AfterCaptureCache : IRecoveryCache
         {
             private readonly IRecoveryCache _inner; private readonly Action _after;
@@ -192,7 +344,7 @@ namespace ExplorerManager.Tests
             public void SaveRun(RunRecord r) => _j.SaveRun(r);
             public void RecordItem(ItemRecord i) { if (i.State == "DeleteIntent") throw new InvalidOperationException("Audit unavailable"); _j.RecordItem(i); }
             public void AddCandidate(string r, FileSnapshot f) => _j.AddCandidate(r, f);
-            public FileSnapshot TakeNextCandidate(string r) => _j.TakeNextCandidate(r);
+            public FileSnapshot TakeNextCandidate(string r, string cleanupUnit = null) => _j.TakeNextCandidate(r, cleanupUnit);
             public void ClearCandidates(string r) => _j.ClearCandidates(r);
             public void SetCandidateTotals(RunRecord r) => _j.SetCandidateTotals(r);
             public void SaveAlert(AlertRecord a) => _j.SaveAlert(a);

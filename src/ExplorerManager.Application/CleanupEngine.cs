@@ -41,6 +41,10 @@ namespace ExplorerManager.Application
                 var deleteElapsed = Stopwatch.StartNew();
                 int attempted = 0;
                 long requestedDeleteBytes = 0;
+                // Capacity stops wait for the current unit; safety stops remain per item.
+                string activeUnit = null;
+                bool activeUnitStarted = false;
+                bool stopAfterUnit = false; // Latched even if an external writer consumes the recovered space.
                 while (true)
                 {
                     cancellation.ThrowIfCancellationRequested();
@@ -53,11 +57,23 @@ namespace ExplorerManager.Application
                         string reason = _gate.StopReason(policy);
                         if (reason != null) { run.State = reason; break; }
                         if (!PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime())) { run.State = "OutsideWindow"; break; }
-                        if (PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId))) { run.State = "TargetReached"; break; }
+                        bool targetReached = PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId));
+                        if (activeUnitStarted) stopAfterUnit |= targetReached;
+                        else if (targetReached) { run.State = "TargetReached"; break; }
                     }
-                    var expected = _journal.TakeNextCandidate(run.Id);
-                    if (expected == null) { run.State = preview ? "PreviewComplete" : "NoEligibleCandidates"; break; }
+                    var expected = _journal.TakeNextCandidate(run.Id, activeUnit);
+                    if (expected == null)
+                    {
+                        if (activeUnit != null)
+                        {
+                            activeUnit = null; activeUnitStarted = false;
+                            if (stopAfterUnit) { run.State = "TargetReached"; break; }
+                            continue;
+                        }
+                        run.State = preview ? "PreviewComplete" : "NoEligibleCandidates"; break;
+                    }
                     if (onlyPath != null && !string.Equals(onlyPath, expected.Path, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (onlyPath == null && activeUnit == null) activeUnit = PolicyRules.CleanupUnitPath(expected);
                     attempted++;
                     var item = new ItemRecord { RunId = run.Id, PolicyId = policy.Id, Utc = _clock.UtcNow, File = expected, Actor = actor, State = "Candidate" };
                     if (!PolicyRules.IsExpired(expected, policy, run.CutoffUtc) || _journal.IsProtected(expected, _clock.UtcNow))
@@ -77,9 +93,17 @@ namespace ExplorerManager.Application
                             _journal.RecordItem(item);
                             cancellation.ThrowIfCancellationRequested();
                             var immediatelyBefore = _volumes.Get(policy.VolumeId);
-                            if (Math.Abs((_clock.UtcNow - run.StartedUtc).TotalSeconds - elapsed.Elapsed.TotalSeconds) > 30 ||
-                                _gate.StopReason(policy) != null || !PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime()) || PolicyRules.TargetReached(policy, immediatelyBefore))
-                            { _cache.Remove(cached.Id, "Cancelled"); cached = null; Skip(item, run, "조건 변경 또는 목표 달성"); continue; }
+                            string stopReason = Math.Abs((_clock.UtcNow - run.StartedUtc).TotalSeconds - elapsed.Elapsed.TotalSeconds) > 30 ? "ClockChanged" :
+                                deleteElapsed.Elapsed.TotalSeconds >= policy.MaxRunSeconds ? "LimitReached" :
+                                _gate.StopReason(policy) ?? (!PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime()) ? "OutsideWindow" : null);
+                            bool targetReached = PolicyRules.TargetReached(policy, immediatelyBefore);
+                            if (activeUnitStarted) stopAfterUnit |= targetReached;
+                            else if (targetReached && stopReason == null) stopReason = "TargetReached";
+                            if (stopReason != null)
+                            {
+                                _cache.Remove(cached.Id, "Cancelled"); cached = null;
+                                Skip(item, run, "조건 변경: " + stopReason); run.State = stopReason; break;
+                            }
                             item.FreeBefore = immediatelyBefore.FreeBytes;
                             requested = true;
                             requestedDeleteBytes += item.Bytes;
@@ -95,10 +119,13 @@ namespace ExplorerManager.Application
                         {
                             if (item.File.IsDirectory) run.DeletedDirectories++; else { run.DeletedFiles++; run.DeletedBytes += item.Bytes; }
                             run.FreeAfter = _volumes.Get(policy.VolumeId).FreeBytes;
-                            if (!PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId)))
+                            if (onlyPath == null)
                             {
+                                activeUnitStarted = true;
+                                stopAfterUnit |= PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId));
                                 var parent = _files.FindEmptyParent(item.File, policy, run.CutoffUtc);
-                                if (parent != null) _journal.AddCandidate(run.Id, parent);
+                                if (parent != null && string.Equals(PolicyRules.CleanupUnitPath(parent), activeUnit, StringComparison.OrdinalIgnoreCase))
+                                    _journal.AddCandidate(run.Id, parent);
                             }
                         }
                         else run.Failed++;

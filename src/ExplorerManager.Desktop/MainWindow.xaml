@@ -79,7 +79,7 @@
         <TextBlock Text="한 줄에 한 경로를 입력하세요." Style="{StaticResource MutedText}" FontSize="11" Margin="0,7,0,0"/>
        </StackPanel></Border>
        <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
-        <TextBlock Text="Cleanup rules" Style="{StaticResource SectionTitle}"/><TextBlock Text="기준에 도달하면 보존 기간이 지난 항목을 오래된 순서대로 정리합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,20"/>
+        <TextBlock Text="Cleanup rules" Style="{StaticResource SectionTitle}"/><TextBlock Text="오래된 대상이 있는 폴더부터 정리하고, 목표 용량 확보 후 진행 중 폴더를 마칩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,20"/>
         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
          <StackPanel><TextBlock Text="Threshold type" Style="{StaticResource FieldLabel}"/><ComboBox AutomationProperties.Name="Threshold type" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedPolicy.Mode}" ItemTemplate="{StaticResource EnumTemplate}"/></StackPanel>
          <StackPanel Grid.Column="2"><TextBlock Text="Start threshold" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="Start threshold" Text="{Binding SelectedPolicy.Start,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel>
