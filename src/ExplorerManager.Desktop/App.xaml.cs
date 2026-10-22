@@ -65,17 +65,17 @@ namespace ExplorerManager.Desktop
                         if (at >= 0 && at + 1 < e.Args.Length)
                         {
                             string screenshot = Path.GetFullPath(e.Args[at + 1]);
-                            await CaptureSectionsAsync(window, screenshot);
+                            await CaptureSectionsAsync(window, screenshot, 1440, 920);
                             window.Width = window.MinWidth; window.Height = window.MinHeight;
-                            await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "compact.png"));
+                            await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "compact.png"), 1120, 720);
                             window.Width = 1440; window.Height = 920;
                             if (e.Args.Contains("--ui-preview"))
                             {
                                 _timer.Stop();
                                 window.DataContext = await UiPreviewClient.CreateAsync(ui);
-                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview.png"));
+                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview.png"), 1440, 920);
                                 window.Width = window.MinWidth; window.Height = window.MinHeight;
-                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview-compact.png"));
+                                await CaptureSectionsAsync(window, Path.Combine(outputDirectory, "preview-compact.png"), 1120, 720);
                                 var alert = new ExplorerManager.Domain.AlertRecord { Message = "예시: 다른 앱에서 파일을 사용하고 있어 건너뛰었습니다.", Path = @"D:\Media\Archive\capture-2026-08.mp4" };
                                 var dialog = new LockAlertWindow { Owner = window, DataContext = new LockAlertViewModel(alert) };
                                 dialog.Show();
@@ -93,18 +93,29 @@ namespace ExplorerManager.Desktop
             }
             else if (e.Args.Contains("--tray")) window.Hide();
         }
-        private async System.Threading.Tasks.Task CaptureSectionsAsync(MainWindow window, string screenshot)
+        private async System.Threading.Tasks.Task CaptureSectionsAsync(MainWindow window, string screenshot, int width, int height)
         {
-            for (int index = 0; index < window.Sections.Items.Count; index++)
+            // Hosted runners may have a smaller desktop. Render the real WPF client at
+            // explicit layout sizes, independent of the native window's screen clamp.
+            var root = window.Sections;
+            root.Width = width; root.Height = height;
+            try
             {
-                window.Sections.SelectedIndex = index;
-                await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
-                string path = index == 0 ? screenshot : Path.Combine(Path.GetDirectoryName(screenshot),
-                    Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
-                Capture(window, path);
+                for (int index = 0; index < root.Items.Count; index++)
+                {
+                    root.SelectedIndex = index;
+                    await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle);
+                    root.Measure(new Size(width, height)); root.Arrange(new Rect(0, 0, width, height)); root.UpdateLayout();
+                    if (Math.Abs(root.ActualWidth - width) > 1 || Math.Abs(root.ActualHeight - height) > 1)
+                        throw new InvalidOperationException("WPF capture did not use the requested layout size.");
+                    string path = index == 0 ? screenshot : Path.Combine(Path.GetDirectoryName(screenshot),
+                        Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
+                    Capture(root, path);
+                }
             }
+            finally { root.ClearValue(FrameworkElement.WidthProperty); root.ClearValue(FrameworkElement.HeightProperty); }
         }
-        private static void Capture(Window window, string path)
+        private static void Capture(FrameworkElement window, string path)
         {
             var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(window);
