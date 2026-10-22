@@ -135,16 +135,32 @@
  <Style x:Key="EmptyState" TargetType="StackPanel"><Setter Property="HorizontalAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="24,60,24,24"/><Setter Property="IsHitTestVisible" Value="False"/></Style>
  <Style TargetType="Expander"><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="Padding" Value="0,12,0,0"/><Setter Property="Margin" Value="0,8,0,0"/></Style>
  <Style TargetType="ToolTip"><Setter Property="Background" Value="{StaticResource HoverBrush}"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="Padding" Value="10,7"/></Style>
+ <Style x:Key="ScrollThumb" TargetType="Thumb">
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Border x:Name="Handle" Background="#45474F" CornerRadius="3" Margin="2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Handle" Property="Background" Value="#6A6C77"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Handle" Property="Background" Value="{StaticResource AccentBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="ScrollPageButton" TargetType="RepeatButton"><Setter Property="Focusable" Value="False"/><Setter Property="IsTabStop" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter></Style>
+ <Style TargetType="ScrollBar">
+  <Setter Property="Width" Value="10"/><Setter Property="MinWidth" Value="10"/><Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+   <Grid Background="{TemplateBinding Background}"><Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" ViewportSize="{TemplateBinding ViewportSize}" Value="{Binding Value,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}" IsDirectionReversed="True">
+    <Track.DecreaseRepeatButton><RepeatButton x:Name="Decrease" Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollPageButton}"/></Track.DecreaseRepeatButton>
+    <Track.Thumb><Thumb Style="{StaticResource ScrollThumb}"/></Track.Thumb>
+    <Track.IncreaseRepeatButton><RepeatButton x:Name="Increase" Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollPageButton}"/></Track.IncreaseRepeatButton>
+   </Track></Grid>
+   <ControlTemplate.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="10"/><Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/><Setter TargetName="Decrease" Property="Command" Value="ScrollBar.PageLeftCommand"/><Setter TargetName="Increase" Property="Command" Value="ScrollBar.PageRightCommand"/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType="TabItem">
-  <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/><Setter Property="Margin" Value="0,2"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+  <Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="Margin" Value="0,2"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
-   <Border x:Name="Chrome" Padding="12,12" Background="Transparent" CornerRadius="6">
+   <Border x:Name="Chrome" Padding="12,12" Background="Transparent" CornerRadius="6" TextElement.Foreground="{StaticResource MutedBrush}">
     <StackPanel Orientation="Horizontal"><TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,12,0"/><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/></StackPanel>
    </Border>
-   <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/><Setter Property="Foreground" Value="#B5ABFF"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger></ControlTemplate.Triggers>
+   <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/><Setter TargetName="Chrome" Property="TextElement.Foreground" Value="#B5ABFF"/><Setter TargetName="Chrome" Property="TextElement.FontWeight" Value="SemiBold"/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="SidebarTabs" TargetType="TabControl">
+  <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
   <Setter Property="Background" Value="{StaticResource CanvasBrush}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="TabStripPlacement" Value="Left"/>
   <Setter Property="ItemsPanel"><Setter.Value><ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate></Setter.Value></Setter>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl">
