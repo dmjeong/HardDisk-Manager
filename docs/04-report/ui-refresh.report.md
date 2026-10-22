@@ -4,8 +4,10 @@
 
 표시 로직은 Presentation에 유지하고 View의 converter와 차트는 표현만 담당한다. .NET Framework 4.8/C# 7.3/x64, 기존 프로젝트 형식, 서비스와 삭제·복구 안전 검증을 유지한다. 새로운 UI 런타임 패키지는 추가하지 않았다.
 
-12개 표시·측정 상태 시험 사례를 추가해 기존 44개와 합계 56개다. 실제 Windows 검증 결과와 실행 패키지·전체 캡처는 [CI 실행](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39862785347)에서 제공한다. 캡처의 예시 데이터는 실제 운영 기록이나 센서 값이 아니다.
+12개 표시·측정 상태 시험 사례를 추가해 기존 44개와 합계 56개다. 실제 Windows 검증 결과와 실행 패키지·전체 캡처는 [CI 실행](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39864809979)에서 제공한다. 캡처의 예시 데이터는 실제 운영 기록이나 센서 값이 아니다.
 
 - [계획](../01-plan/features/ui-refresh.plan.md)
 - [디자인](../02-design/features/ui-refresh.design.md)
 - [검토](../03-analysis/ui-refresh.analysis.md)
+
+UI 문구는 자연스러운 한영 혼용으로 정리했다. 메뉴·일반 작업·기술 용어는 Dashboard, Policies, Preview, Recovery cache, Read/Write throughput 등으로 표시하고, 사용 안내와 삭제·복구·강제 종료 확인은 한국어로 전달한다. I/O latency에는 읽기·쓰기 평균 지연 중 큰 값이라는 설명을 제공한다.

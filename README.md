@@ -4,11 +4,11 @@
 
 ## 화면
 
-좌측 메뉴, 드라이브 상태 카드, 구역별 정책 편집, 복구·알림 상세와 리소스 차트로 구성했습니다. 아래는 실제 WPF 컨트롤을 예시 데이터로 렌더링한 화면입니다. 표시된 드라이브·기록·센서 값은 운영 데이터가 아닙니다.
+Dashboard·Policies·History·Recovery·Monitoring·Alerts·Settings 메뉴로 구성했습니다. 메뉴와 기술 레이블은 영어, 설명과 삭제·복구 확인 문장은 한국어로 자연스럽게 혼용합니다. 아래는 실제 WPF 컨트롤을 예시 데이터로 렌더링한 화면입니다. 표시된 드라이브·기록·센서 값은 운영 데이터가 아닙니다.
 
 ![Explorer Manager 개요](docs/images/overview.png)
 
-[드라이브 정책](docs/images/policies.png) · [리소스 모니터](docs/images/monitoring.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39862785347)
+[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39864809979)
 
 ## 실행 구성
 
@@ -27,7 +27,7 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 2. 그 안의 `ExplorerManager-win-x64.zip`을 완전히 압축 해제합니다.
 3. 관리자 Windows PowerShell 5.1에서 `./Install.ps1`을 실행합니다.
 4. 관리할 폴더에 서비스 권한을 부여합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
-5. WPF 앱을 관리자 권한으로 실행하고 **정책 저장 → 미리보기 → 결과 확인 → 자동 삭제 활성화** 순서로 설정합니다.
+5. WPF 앱을 관리자 권한으로 실행하고 **Save policy → Preview → 결과 확인 → 자동 정리 활성화** 순서로 설정합니다.
 
 삭제 서비스 이름은 `ExplorerManager`(전용 가상 계정), 하드웨어 센서 서비스는 `ExplorerManagerSensors`(LocalSystem)입니다. 센서 서비스는 측정값만 제공하며 삭제·프로세스 종료 명령을 받지 않습니다. `Install.ps1 -NoHardwareSensors`로 관리자 센서를 제외할 수 있습니다.
 
@@ -53,7 +53,7 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 
 ## 잠금과 강제 종료
 
-잠금 파일은 스킵하고 이력과 알람을 남깁니다. 알람에는 **강제 종료 후 삭제하시겠습니까?**를 표시합니다. 종료는 환경설정의 허용 앱 중 현재 운영자 소유·동일 세션의 일반 앱만 지원합니다. 프로세스 시작 시각과 실제 핸들을 확인하며 필수·보호·서비스 프로세스는 제외합니다. 권한 거부와 잠금을 구분합니다.
+잠금 파일은 스킵하고 이력과 알람을 남깁니다. 알람에는 **강제 종료 후 삭제하시겠습니까?**를 표시합니다. 종료는 Settings의 Process allowlist에 등록한 앱 중 현재 운영자 소유·동일 세션의 일반 앱만 지원합니다. 프로세스 시작 시각과 실제 핸들을 확인하며 필수·보호·서비스 프로세스는 제외합니다. 권한 거부와 잠금을 구분합니다.
 
 ## 모니터링
 
