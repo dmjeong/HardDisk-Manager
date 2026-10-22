@@ -9,6 +9,8 @@
 | Service serializes resize with operations | Shared _sync idle check; runtime busy/other-settings/restart/range Windows tests |
 | Audit failure cannot enable mismatched cleanup | Atomic settings+audit transaction; SettingsAndAuditAreCommittedTogether; independent StopReason capacity consistency check |
 | UI preserves drafts and shows actual applied state | MiB validation, post-save Dashboard+Recovery refresh after any older refresh, presentation tests |
-| Framework/MVVM compatibility | Source compile and portable cache tests passed; full Windows CI pending |
+| Framework/MVVM compatibility | Source compile and portable cache tests passed; full Windows CI passed (112/112 tests, 29 WPF renders, zero binding errors) |
 
 All additional operator options in operator-options.plan.md remain proposals. Existing deletion folder semantics and per-file durable audit are unchanged.
+
+Verified code: `9f607f0b45e95f783037e184273cb5374f86b14e`. [Windows CI](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39868712416).
