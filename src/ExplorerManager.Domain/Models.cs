@@ -5,6 +5,9 @@ namespace ExplorerManager.Domain
 {
     public enum ThresholdMode { UsedPercent, UsedBytes, FreeBytes }
     public enum AgeBasis { LastWriteTime, CreationTime }
+    public enum AlertDeliveryMode { Popup, Tray, LogOnly }
+    [Flags]
+    public enum ScheduleDays { None = 0, Sunday = 1, Monday = 2, Tuesday = 4, Wednesday = 8, Thursday = 16, Friday = 32, Saturday = 64, All = 127 }
 
     public sealed class DrivePolicy
     {
@@ -30,6 +33,9 @@ namespace ExplorerManager.Domain
         public long ReadBytesPerSecond { get; set; } = 10L * 1024 * 1024;
         public int StartHour { get; set; }
         public int EndHour { get; set; } = 24;
+        public int StartMinute { get; set; }
+        public int EndMinute { get; set; }
+        public ScheduleDays ScheduleDays { get; set; } = ScheduleDays.All;
         public int RestoreProtectionHours { get; set; } = 24;
     }
 
@@ -193,5 +199,22 @@ namespace ExplorerManager.Domain
         public int AnomalyDurationSeconds { get; set; } = 60;
         public bool PauseOnHealthCritical { get; set; } = true;
         public long MinimumAvailableRam { get; set; } = 1073741824;
+        public AlertDeliveryMode LockedFileNotificationMode { get; set; } = AlertDeliveryMode.Popup;
+        public int LockedFileNotificationIntervalSeconds { get; set; } = 300;
+        public int InterlockTripSeconds { get; set; } = 60;
+        public int InterlockRecoverySeconds { get; set; } = 60;
+        public bool InterlockManualReset { get; set; }
+        public List<string> InterlockProcessNames { get; set; } = new List<string>();
+    }
+
+    public sealed class InterlockStatus
+    {
+        public string Code { get; set; }
+        public string Entity { get; set; }
+        public string State { get; set; }
+        public bool Blocking { get; set; }
+        public bool Latched { get; set; }
+        public DateTime SinceUtc { get; set; }
+        public string Detail { get; set; }
     }
 }

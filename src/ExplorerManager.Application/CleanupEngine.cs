@@ -35,6 +35,7 @@ namespace ExplorerManager.Application
             {
                 if (!preview && !PolicyRules.ShouldStart(policy, before)) { run.State = "BelowThreshold"; return run; }
                 if (!preview && !PolicyRules.InWindow(policy, _clock.UtcNow.ToLocalTime())) { run.State = "OutsideWindow"; return run; }
+                if (!preview) { string reason = _gate.StopReason(policy); if (reason != null) { run.State = reason; return run; } }
                 await _files.ScanAsync(policy, run.CutoffUtc, run.Id, _journal, cancellation).ConfigureAwait(false);
                 _journal.SetCandidateTotals(run);
                 run.State = preview ? "Preview" : "Deleting"; _journal.SaveRun(run);
@@ -168,7 +169,11 @@ namespace ExplorerManager.Application
                     _journal.SaveRun(run);
                 }
             }
-            catch (OperationCanceledException) { run.State = "UserCancelled"; }
+            catch (OperationCanceledException)
+            {
+                run.State = "UserCancelled";
+                try { run.State = _gate.StopReason(policy) ?? run.State; } catch { run.State = "AuditUnavailable"; }
+            }
             catch (TimeoutException ex) { run.State = "ScanIncomplete"; run.Detail = ex.Message; }
             catch (Exception ex) { run.State = "Failed"; run.Detail = ex.ToString(); throw; }
             finally

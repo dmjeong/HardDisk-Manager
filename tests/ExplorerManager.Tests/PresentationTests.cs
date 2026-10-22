@@ -181,6 +181,105 @@ namespace ExplorerManager.Tests
             Assert.EndsWith(" / " + DisplayText.Bytes(2048L * 1048576), vm.CacheSummary);
             Assert.Equal(2048, vm.CacheCapacityMiB);
         }
+        [Theory]
+        [InlineData(AlertDeliveryMode.Popup, 1, 0)]
+        [InlineData(AlertDeliveryMode.Tray, 0, 1)]
+        [InlineData(AlertDeliveryMode.LogOnly, 0, 0)]
+        public async Task LockedFileDeliveryModesBatchNewAlertsWithoutAcknowledgingOrTerminating(AlertDeliveryMode mode, int popups, int notifications)
+        {
+            var client = new FakeClient(); var ui = new FakeUi();
+            client.State.OperatorSettings = new AppSettings { LockedFileNotificationMode = mode, LockedFileNotificationIntervalSeconds = 0 };
+            for (int i = 0; i < 3; i++) client.State.Alerts.Add(LockedAlert("batch-" + i));
+            client.State.Alerts.Add(new AlertRecord { Category = "DiskHealth", Severity = "Critical", Message = "Critical remains recorded" });
+            var vm = new MainViewModel(client, ui); await vm.RefreshAsync(); await vm.RefreshAsync();
+            Assert.Equal(popups, ui.PopupCount); Assert.Equal(notifications, ui.NotificationCount); Assert.Equal(4, vm.Alerts.Count);
+            Assert.All(vm.Alerts, alert => Assert.False(alert.Acknowledged));
+            Assert.DoesNotContain("Acknowledge", client.Commands); Assert.DoesNotContain("PrepareUnlock", client.Commands);
+            Assert.DoesNotContain("RetryAlert", client.Commands); Assert.Equal(0, client.CloseProcessesCount);
+        }
+        [Fact] public async Task NotificationFallbackLoadsPersistedSettingsBeforeFirstDelivery()
+        {
+            var client = new FakeClient(); var ui = new FakeUi(); client.SettingsData.LockedFileNotificationMode = AlertDeliveryMode.LogOnly;
+            client.State.Alerts.Add(LockedAlert("first-load"));
+            var vm = new MainViewModel(client, ui); await vm.RefreshAsync();
+            Assert.Equal(1, client.SettingsRequests); Assert.Equal(0, ui.PopupCount); Assert.Equal(0, ui.NotificationCount);
+        }
+        [Fact] public async Task PersistedNotificationPreferencesOverrideUnsavedDraftAndSuppressedAlertsDoNotBuildBacklog()
+        {
+            var client = new FakeClient(); var ui = new FakeUi();
+            client.State.OperatorSettings = new AppSettings { LockedFileNotificationMode = AlertDeliveryMode.LogOnly, LockedFileNotificationIntervalSeconds = 0 };
+            var vm = new MainViewModel(client, ui); await vm.RefreshAsync();
+            vm.Settings.LockedFileNotificationMode = AlertDeliveryMode.Popup; client.State.Alerts.Add(LockedAlert("log-only")); await vm.RefreshAsync();
+            Assert.Equal(0, ui.PopupCount);
+            vm.Settings.LockedFileNotificationMode = AlertDeliveryMode.LogOnly;
+            client.State.OperatorSettings.LockedFileNotificationMode = AlertDeliveryMode.Tray;
+            client.State.Alerts.Add(LockedAlert("tray")); await vm.RefreshAsync();
+            Assert.Equal(1, ui.NotificationCount); Assert.Equal(AlertDeliveryMode.LogOnly, vm.Settings.LockedFileNotificationMode);
+            client.State.OperatorSettings.LockedFileNotificationMode = AlertDeliveryMode.Popup;
+            client.State.OperatorSettings.LockedFileNotificationIntervalSeconds = 86400;
+            client.State.Alerts.Add(LockedAlert("suppressed")); await vm.RefreshAsync(); Assert.Equal(0, ui.PopupCount);
+            client.State.OperatorSettings.LockedFileNotificationIntervalSeconds = 0; await vm.RefreshAsync(); Assert.Equal(0, ui.PopupCount);
+            client.State.Alerts.Add(LockedAlert("new-after-throttle")); await vm.RefreshAsync(); Assert.Equal(1, ui.PopupCount);
+        }
+        [Fact] public async Task SavingOperatorOptionsPreservesDraftAndUsesNewLiveNotificationPreferences()
+        {
+            var client = new FakeClient(); var ui = new FakeUi();
+            client.State.OperatorSettings = new AppSettings { LockedFileNotificationMode = AlertDeliveryMode.LogOnly };
+            var vm = new MainViewModel(client, ui); await vm.RefreshAsync(); var draft = vm.Settings;
+            vm.Settings.LockedFileNotificationMode = AlertDeliveryMode.Tray; vm.LockedFileNotificationIntervalSeconds = 0;
+            vm.MinimumAvailableRamMiB = 2048; vm.HistoryMaxMiB = 4096; vm.InterlockTripSeconds = 20; vm.InterlockRecoverySeconds = 30;
+            vm.Settings.InterlockManualReset = true; vm.InterlockApps = " Encoder.exe \nencoder.exe\nRecorder.exe";
+            client.AfterSettingsSave = () => vm.InterlockApps = "UnsavedNext.exe";
+            await ExecuteAsync(vm.SaveSettingsCommand);
+            Assert.Same(draft, vm.Settings); Assert.Equal("UnsavedNext.exe", vm.InterlockApps);
+            Assert.Equal(new[] { "Encoder.exe", "Recorder.exe" }, client.SavedSettings.InterlockProcessNames);
+            Assert.Equal(2048L * 1048576, client.SavedSettings.MinimumAvailableRam); Assert.Equal(4096L * 1048576, client.SavedSettings.HistoryMaxBytes);
+            Assert.True(client.SavedSettings.InterlockManualReset); Assert.Equal(20, client.SavedSettings.InterlockTripSeconds); Assert.Equal(30, client.SavedSettings.InterlockRecoverySeconds);
+            client.State.Alerts.Add(LockedAlert("after-save")); await vm.RefreshAsync();
+            Assert.Equal(1, ui.NotificationCount); Assert.Equal(0, ui.PopupCount); Assert.Equal(1, client.SettingsRequests);
+        }
+        [Fact] public void OperatorOptionUnitsAndDelaysRejectOutOfRangeValuesWithoutChangingDraft()
+        {
+            var vm = new MainViewModel(new FakeClient(), new FakeUi());
+            vm.MinimumAvailableRamMiB = 1; vm.HistoryMaxMiB = 10; vm.InterlockTripSeconds = 0; vm.InterlockRecoverySeconds = 3600; vm.LockedFileNotificationIntervalSeconds = 86400;
+            Assert.Equal(1048576, vm.Settings.MinimumAvailableRam); Assert.Equal(10485760, vm.Settings.HistoryMaxBytes);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.MinimumAvailableRamMiB = 0);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.MinimumAvailableRamMiB = 1048577);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.HistoryMaxMiB = 9);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.HistoryMaxMiB = 102401);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.InterlockTripSeconds = -1);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.InterlockRecoverySeconds = 3601);
+            Assert.Throws<ArgumentOutOfRangeException>(() => vm.LockedFileNotificationIntervalSeconds = 86401);
+            Assert.Equal(1, vm.MinimumAvailableRamMiB); Assert.Equal(10, vm.HistoryMaxMiB); Assert.Equal(0, vm.InterlockTripSeconds);
+            Assert.Equal(3600, vm.InterlockRecoverySeconds); Assert.Equal(86400, vm.LockedFileNotificationIntervalSeconds);
+        }
+        [Fact] public async Task InterlockResetRefreshesReasonsWithoutResumingManualPauseOrLosingDraft()
+        {
+            var client = new FakeClient(); client.State.Paused = true;
+            client.State.Interlocks.Add(new InterlockStatus { Code = "LowMemory", Entity = "RAM", State = "AwaitingReset", Blocking = true, Latched = true, SinceUtc = DateTime.UtcNow, Detail = "RAM 정상화 후 수동 해제 대기" });
+            client.State.Interlocks.Add(new InterlockStatus { Code = "ManualPause", Entity = "Service", State = "Tripped", Blocking = true, Detail = "사용자 일시정지" });
+            var vm = new MainViewModel(client, new FakeUi()); await vm.RefreshAsync();
+            Assert.Contains("2건", vm.InterlockSummary); Assert.Contains("RAM 정상화", vm.InterlockDetails);
+            vm.MinimumAvailableRamMiB = 2048; vm.InterlockApps = "Draft.exe";
+            client.AfterResetInterlocks = () => { client.State.Interlocks[0].Blocking = false; client.State.Interlocks[0].Latched = false; client.State.Interlocks[0].State = "Clear"; };
+            await ExecuteAsync(vm.ResetInterlocksCommand);
+            Assert.Equal(1, client.ResetInterlocksCount); Assert.True(vm.IsPaused); Assert.Contains("1건", vm.InterlockSummary);
+            Assert.DoesNotContain("RAM 정상화", vm.InterlockDetails); Assert.Equal(2048, vm.MinimumAvailableRamMiB); Assert.Equal("Draft.exe", vm.InterlockApps);
+            Assert.DoesNotContain("Resume", client.Commands);
+            client.FailDashboard = true; await vm.RefreshAsync(); Assert.Empty(vm.Interlocks); Assert.Contains("대기", vm.InterlockSummary);
+        }
+        [Fact] public async Task UnsafeInterlockResetRetainsBlockingStatusAndExplainsRejection()
+        {
+            var client = new FakeClient { FailInterlockReset = true }; var ui = new FakeUi();
+            client.State.Interlocks.Add(new InterlockStatus { Code = "LowMemory", Entity = "RAM", State = "Tripped", Blocking = true, Latched = true, Detail = "RAM 부족" });
+            var vm = new MainViewModel(client, ui); await vm.RefreshAsync();
+            await ExecuteAsync(vm.ResetInterlocksCommand);
+            Assert.Contains("위험 조건", vm.Message); Assert.Equal(vm.Message, ui.LastNotification);
+            Assert.True(vm.Interlocks[0].Blocking); Assert.True(vm.Interlocks[0].Latched);
+            Assert.Equal(1, client.DashboardRequests); Assert.DoesNotContain("Resume", client.Commands);
+        }
+        private static AlertRecord LockedAlert(string id) => new AlertRecord
+        { Id = id, Utc = DateTime.UtcNow, Category = "LockedFile", Severity = "Warning", Path = "D:\\archive\\" + id + ".bin", Message = "사용 중인 파일" };
         private static Task ExecuteAsync(AsyncCommand command)
         {
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -205,6 +304,11 @@ namespace ExplorerManager.Tests
             public RecoveryInfo[] RecoveryItems { get; set; } = Array.Empty<RecoveryInfo>();
             public Action AfterSettingsSave { get; set; }
             public TaskCompletionSource<Dashboard> NextDashboardReply { get; set; }
+            public List<string> Commands { get; } = new List<string>();
+            public int CloseProcessesCount { get; private set; }
+            public int ResetInterlocksCount { get; private set; }
+            public Action AfterResetInterlocks { get; set; }
+            public bool FailInterlockReset { get; set; }
             public Dashboard State { get; } = new Dashboard
             {
                 Utc = DateTime.UtcNow, IsOperator = true, CacheCapacity = 1073741824,
@@ -213,6 +317,7 @@ namespace ExplorerManager.Tests
             };
             public Task<T> SendAsync<T>(string command, object data = null, CancellationToken ct = default(CancellationToken))
             {
+                Commands.Add(command);
                 object value;
                 switch (command)
                 {
@@ -227,8 +332,11 @@ namespace ExplorerManager.Tests
                     case "Settings": SettingsRequests++; value = CopySettings(SettingsData); break;
                     case "SaveSettings":
                         if (FailSettingsSave) throw new InvalidOperationException("작업 중에는 캐시 한도를 변경할 수 없습니다.");
-                        SavedSettings = CopySettings((AppSettings)data); State.CacheCapacity = SavedSettings.CacheBytes;
+                        SavedSettings = CopySettings((AppSettings)data); State.CacheCapacity = SavedSettings.CacheBytes; State.OperatorSettings = CopySettings(SavedSettings);
                         AfterSettingsSave?.Invoke(); value = null; break;
+                    case "ResetInterlocks":
+                        ResetInterlocksCount++; if (FailInterlockReset) throw new InvalidOperationException("위험 조건이 남아 있어 해제할 수 없습니다.");
+                        AfterResetInterlocks?.Invoke(); value = true; break;
                     default: throw new InvalidOperationException(command);
                 }
                 return Task.FromResult((T)value);
@@ -239,19 +347,24 @@ namespace ExplorerManager.Tests
                 CpuWarningPercent = value.CpuWarningPercent, CpuTemperatureWarning = value.CpuTemperatureWarning,
                 DiskTemperatureWarning = value.DiskTemperatureWarning, DiskLatencyWarningMs = value.DiskLatencyWarningMs,
                 AnomalyDurationSeconds = value.AnomalyDurationSeconds, PauseOnHealthCritical = value.PauseOnHealthCritical,
-                MinimumAvailableRam = value.MinimumAvailableRam, AllowedProcessNames = new List<string>(value.AllowedProcessNames)
+                MinimumAvailableRam = value.MinimumAvailableRam, AllowedProcessNames = new List<string>(value.AllowedProcessNames),
+                LockedFileNotificationMode = value.LockedFileNotificationMode, LockedFileNotificationIntervalSeconds = value.LockedFileNotificationIntervalSeconds,
+                InterlockTripSeconds = value.InterlockTripSeconds, InterlockRecoverySeconds = value.InterlockRecoverySeconds,
+                InterlockManualReset = value.InterlockManualReset, InterlockProcessNames = new List<string>(value.InterlockProcessNames)
             };
-            public Task CloseProcessesAsync(UnlockTicket t, bool f, CancellationToken c) => Task.CompletedTask;
+            public Task CloseProcessesAsync(UnlockTicket t, bool f, CancellationToken c) { CloseProcessesCount++; return Task.CompletedTask; }
         }
         private sealed class FakeUi : IUiServices
         {
             public string LastNotification { get; private set; }
+            public int NotificationCount { get; private set; }
+            public int PopupCount { get; private set; }
             public bool InputsValid => true;
             public Task<bool> ConfirmAsync(string title, string text) => Task.FromResult(false);
-            public Task<int> ShowLockAlertAsync(AlertRecord alert) => Task.FromResult(0);
+            public Task<int> ShowLockAlertAsync(AlertRecord alert) { PopupCount++; return Task.FromResult(0); }
             public Task<string> PickFolderAsync() => Task.FromResult<string>(null);
             public Task SaveTextAsync(string name, string text) => Task.CompletedTask;
-            public void Notify(string title, string text) { LastNotification = text; }
+            public void Notify(string title, string text) { LastNotification = text; NotificationCount++; }
             public void RunElevated() { }
         }
     }

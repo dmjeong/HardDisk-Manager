@@ -16,6 +16,8 @@
     <Compile Include="CandidateQueueTests.cs" />
     <Compile Include="EngineTests.cs" />
     <Compile Include="FolderCleanupWindowsTests.cs" />
+    <Compile Include="InterlockTests.cs" />
+    <Compile Include="RuntimeInterlockTests.cs" />
     <Compile Include="PolicyTests.cs" />
     <Compile Include="PresentationTests.cs" />
     <Compile Include="WindowsSafetyTests.cs" />

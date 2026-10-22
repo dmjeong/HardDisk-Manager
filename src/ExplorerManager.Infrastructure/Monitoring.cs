@@ -23,20 +23,63 @@ namespace ExplorerManager.Infrastructure
         private readonly SqliteJournal _store;
         private readonly Action<Exception> _error;
         private readonly object _sync = new object();
+        private readonly object _interlockSync = new object();
+        private readonly ResourceInterlocks _resourceInterlocks = new ResourceInterlocks();
         private readonly Dictionary<string, SustainedRule> _rules = new Dictionary<string, SustainedRule>();
         private readonly Dictionary<string, double> _previousErrors = new Dictionary<string, double>();
         private readonly Dictionary<string, Tuple<double, int>> _baselines = new Dictionary<string, Tuple<double, int>>();
         private List<Metric> _latest = new List<Metric>(), _sensorMetrics = new List<Metric>();
         private Process _sensor;
-        private DateTime _sensorUtc;
-        private bool _loadPaused;
-        private DateTime? _loadSince, _recoverySince;
+        private DateTime _sensorUtc, _lastSampleUtc;
 #if NETFRAMEWORK
         private EventLogWatcher _events;
 #endif
-        public Monitoring(SqliteJournal store, Action<Exception> error) { _store = store; _error = error; }
+        public Monitoring(SqliteJournal store, Action<Exception> error)
+        {
+            _store = store; _error = error;
+            _resourceInterlocks.Restore(_store.LoadInterlocks());
+        }
         public IList<Metric> Snapshot() { lock (_sync) return _latest.ToList(); }
-        public string LoadStopReason => _loadPaused ? "PausedByLoad" : null;
+        public IList<InterlockStatus> Interlocks => RefreshInterlocks();
+        public DateTime LastSampleUtc { get { lock (_sync) return _lastSampleUtc; } }
+        public string LoadStopReason => Interlocks.Any(status => status.Blocking) ? "PausedByInterlock" : null;
+        private IList<InterlockStatus> RefreshInterlocks()
+        {
+            // Re-evaluate current evidence so changed settings apply before the next mutation gate.
+            lock (_interlockSync)
+            {
+                var before = _resourceInterlocks.Snapshot();
+                var after = _resourceInterlocks.Update(Snapshot(), DateTime.UtcNow, _store.Settings());
+                LogInterlockTransitions(before, after);
+                return after;
+            }
+        }
+        public bool ResetInterlocks()
+        {
+            lock (_interlockSync)
+            {
+                var before = _resourceInterlocks.Snapshot();
+                bool reset = _resourceInterlocks.Reset(DateTime.UtcNow, _store.Settings());
+                LogInterlockTransitions(before, _resourceInterlocks.Snapshot());
+                return reset;
+            }
+        }
+        private void LogInterlockTransitions(IList<InterlockStatus> before, IList<InterlockStatus> after)
+        {
+            bool changed = after.Any(status =>
+            {
+                var previous = before.FirstOrDefault(old => old.Code == status.Code && old.Entity == status.Entity);
+                return status.Blocking != (previous?.Blocking ?? false) || status.Latched != (previous?.Latched ?? false);
+            });
+            if (changed) _store.SaveInterlocks(after.Where(status => status.Blocking || status.Latched));
+            foreach (var status in after)
+            {
+                bool wasBlocking = before.Any(old => old.Code == status.Code && old.Entity == status.Entity && old.Blocking);
+                if (wasBlocking == status.Blocking) continue;
+                _store.RecordEvent(status.Blocking ? "InterlockTripped" : "InterlockCleared", "Monitoring",
+                    status.Code + "/" + status.Entity, status.Detail);
+            }
+        }
         public async Task RunAsync(CancellationToken ct)
         {
             var sensorTask = ReadSensorsAsync(ct);
@@ -61,8 +104,15 @@ namespace ExplorerManager.Infrastructure
                             if ((DateTime.UtcNow - _sensorUtc).TotalSeconds < 20) samples.AddRange(_sensorMetrics);
                             else samples.Add(new Metric { Entity = "CPU", Name = "Temperature", Quality = "Stale", Unit = "°C", Provider = "SensorHost", Detail = "센서 호스트 응답 대기/권한/장치 미지원" });
                         }
+                        DateTime utcNow = DateTime.UtcNow;
                         Evaluate(samples, origin + monotonic.Elapsed, _store.Settings());
-                        lock (_sync) _latest = samples;
+                        lock (_interlockSync)
+                        {
+                            var previous = _resourceInterlocks.Snapshot();
+                            var current = _resourceInterlocks.Update(samples, utcNow, _store.Settings());
+                            lock (_sync) { _latest = samples; _lastSampleUtc = utcNow; }
+                            LogInterlockTransitions(previous, current);
+                        }
                         if (++tick % 5 == 0) _store.SaveMetrics(samples);
                         await Task.Delay(2000, ct).ConfigureAwait(false);
                     }
@@ -79,12 +129,6 @@ namespace ExplorerManager.Infrastructure
                 if (io.Count == 2) samples.Add(new Metric { Entity = queue.Entity, Name = "StalledIO",
                     Value = queue.Value > 0 && io.All(m => m.Value == 0) ? 1 : 0, Unit = "flag", Provider = "DerivedPDH", Detail = "미완료 큐가 있으나 읽기/쓰기 완료 처리량이 0" });
             }
-            var cpu = samples.FirstOrDefault(m => m.Name == "CPU" && m.Quality == "Valid")?.Value;
-            var ram = samples.FirstOrDefault(m => m.Name == "AvailableRAM" && m.Quality == "Valid")?.Value;
-            var cpuTemp = samples.Where(m => m.Entity == "CPU" && m.Name == "Temperature" && m.Quality == "Valid" && m.Value.HasValue).Select(m => m.Value.Value).DefaultIfEmpty(0).Max();
-            bool overloaded = cpu > settings.CpuWarningPercent || (ram.HasValue && ram * 1073741824 < settings.MinimumAvailableRam) || cpuTemp > settings.CpuTemperatureWarning;
-            if (overloaded) { _recoverySince = null; if (!_loadSince.HasValue) _loadSince = now; if (now - _loadSince.Value > TimeSpan.FromSeconds(settings.AnomalyDurationSeconds)) _loadPaused = true; }
-            else { _loadSince = null; if (!_recoverySince.HasValue) _recoverySince = now; if (now - _recoverySince.Value > TimeSpan.FromSeconds(60)) _loadPaused = false; }
             foreach (var metric in samples.Where(m => m.Quality == "Valid" && m.Value.HasValue))
             {
                 bool bad = false; string severity = "Warning";

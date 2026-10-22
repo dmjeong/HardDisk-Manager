@@ -18,6 +18,7 @@ using ExplorerManager.Client;
 
 namespace ExplorerManager.Tests
 {
+    [Collection("Service runtime")]
     public sealed class WindowsSafetyTests
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

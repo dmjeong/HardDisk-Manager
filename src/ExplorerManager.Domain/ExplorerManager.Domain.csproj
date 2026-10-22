@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="Models.cs" />
     <Compile Include="PolicyRules.cs" />
+    <Compile Include="ResourceInterlocks.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

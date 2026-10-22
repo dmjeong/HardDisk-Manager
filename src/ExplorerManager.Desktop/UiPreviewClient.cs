@@ -27,7 +27,7 @@ namespace ExplorerManager.Desktop
         {
             _dashboard = new Dashboard
             {
-                Utc = _now, Health = "Ready", Paused = true, IsOperator = false,
+                Utc = _now, Health = "Ready", Paused = false, IsOperator = false,
                 CacheUsed = 512000000, CacheCapacity = 1073741824, CacheEpoch = "ui-preview-only",
                 Volumes = new List<VolumeStatus>
                 {
@@ -50,7 +50,7 @@ namespace ExplorerManager.Desktop
                 {
                     Metric("CPU", "CPU", Cpu(89), "%"),
                     Metric("CPU", "Temperature", 52.4, "°C"),
-                    Metric("Memory", "Available", 12.8, "GiB"),
+                    Metric("RAM", "AvailableRAM", 0.8, "GiB"),
                     Metric("Disk 1", "ReadBytes", Read(89), "MiB/s"),
                     Metric("Disk 1", "WriteBytes", Write(89), "MiB/s"),
                     Metric("Disk 1", "ReadLatency", Latency(89), "ms"),
@@ -105,7 +105,16 @@ namespace ExplorerManager.Desktop
                 new FolderSummary { Path = @"D:\Media\Captures\2026-08", RunId = "ui-run-1", DeletedFiles = 64, DeletedDirectories = 7, LogicalBytes = 12400000000L, ObservedFreeDelta = 12360000000L },
                 new FolderSummary { Path = @"D:\Media\Captures\2026-07", RunId = "ui-run-3", DeletedFiles = 42, DeletedDirectories = 4, LogicalBytes = 10600000000L, ObservedFreeDelta = 10580000000L }
             };
-            _settings = new AppSettings { AllowedProcessNames = new List<string> { "VideoEditor", "MediaPlayer" } };
+            _settings = new AppSettings { AllowedProcessNames = new List<string> { "VideoEditor.exe", "MediaPlayer.exe" },
+                InterlockProcessNames = new List<string> { "VideoEncoder.exe" } };
+            _dashboard.OperatorSettings = new AppSettings { LockedFileNotificationMode = AlertDeliveryMode.Popup, LockedFileNotificationIntervalSeconds = 300 };
+            _dashboard.Interlocks = new List<InterlockStatus>
+            {
+                new InterlockStatus { Code = "LowMemory", Entity = "RAM", State = "Tripped", Blocking = true, Latched = true,
+                    SinceUtc = _now.AddSeconds(-12), Detail = "[예시] 여유 RAM 0.8 GiB / 한도 1 GiB · 메모리 부족으로 즉시 차단" },
+                new InterlockStatus { Code = "CpuLoad", Entity = "CPU", State = "Clear", Blocking = false, Latched = false,
+                    SinceUtc = _now.AddMinutes(-4), Detail = "[예시] CPU 사용률이 90% 미만입니다." }
+            };
         }
 
         public static async Task<MainViewModel> CreateAsync(IUiServices ui)

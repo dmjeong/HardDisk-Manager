@@ -67,7 +67,14 @@ namespace ExplorerManager.Presentation
             { "Warning", "주의" }, { "Critical", "위험" }, { "Info", "안내" }, { "Valid", "정상" },
             { "WarmingUp", "측정 대기" }, { "Unsupported", "미지원" }, { "Stale", "측정 대기" }, { "Error", "측정 오류" },
             { "LockedFile", "파일 사용 중" }, { "DiskHealth", "디스크 상태" }, { "DiskPerformance", "디스크 성능" },
-            { "Temperature", "온도 알림" }, { "AuditUnavailable", "기록 실패" }
+            { "Temperature", "온도 알림" }, { "AuditUnavailable", "기록 실패" },
+            { "Clear", "정상" }, { "Pending", "차단 전 대기" }, { "Tripped", "차단" }, { "Recovering", "복구 조건 확인 중" },
+            { "AwaitingReset", "수동 해제 대기" }, { "Unknown", "측정 대기" }, { "LowMemory", "시스템 RAM 부족" },
+            { "CpuLoad", "CPU 부하" }, { "CpuTemperature", "CPU 온도" }, { "DiskTemperature", "디스크 온도" },
+            { "DiskReadLatency", "디스크 읽기 지연" }, { "DiskWriteLatency", "디스크 쓰기 지연" },
+            { "ManualPause", "사용자 일시정지" }, { "TelemetryUnavailable", "모니터링 상태 확인 불가" },
+            { "ProcessRunning", "지정 앱 실행 중" }, { "ProcessInspectionUnavailable", "앱 상태 확인 불가" },
+            { "PausedByInterlock", "인터록으로 일시정지" }, { "UserPaused", "사용자 일시정지" }, { "PolicyChanged", "정책 변경으로 중단" }
         };
 
         // Storage capacities use decimal units; sensor metrics retain their reported units.

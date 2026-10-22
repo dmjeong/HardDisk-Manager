@@ -17,7 +17,9 @@ namespace ExplorerManager.Presentation
         private TaskCompletionSource<bool> _refreshFinished;
         private readonly System.Collections.Generic.HashSet<string> _seen = new System.Collections.Generic.HashSet<string>();
         private DateTime _lastPopup = DateTime.MinValue;
-        private string _message = "서비스에 연결하는 중…", _status = "연결 대기", _cacheText = "측정 대기", _filter = "", _folder = "", _allowedApps = "";
+        private string _message = "서비스에 연결하는 중…", _status = "연결 대기", _cacheText = "측정 대기", _filter = "", _folder = "", _allowedApps = "", _interlockApps = "";
+        private AlertDeliveryMode _liveNotificationMode = AlertDeliveryMode.Popup;
+        private int _liveNotificationIntervalSeconds = 300;
         private PolicyEditor _selectedPolicy;
         private ItemRecord _selectedItem;
         private AlertRecord _selectedAlert;
@@ -36,6 +38,7 @@ namespace ExplorerManager.Presentation
             _client = client; _ui = ui;
             Volumes.CollectionChanged += (sender, args) => { Changed(nameof(VolumeCountText)); Changed(nameof(TotalFreeText)); };
             Alerts.CollectionChanged += (sender, args) => Changed(nameof(AlertCountText));
+            Interlocks.CollectionChanged += (sender, args) => NotifyInterlocks();
             RefreshCommand = Command(async () => { await RefreshAsync(); await LoadHistoryAsync(); });
             NewCommand = Command(() => { SelectedPolicy = new PolicyEditor(new DrivePolicy { VolumeId = Volumes.FirstOrDefault()?.Id ?? "" }); Policies.Add(SelectedPolicy); return Task.CompletedTask; });
             SaveCommand = Command(SavePolicyAsync);
@@ -50,6 +53,12 @@ namespace ExplorerManager.Presentation
             CancelCommand = Command(async () => { await _client.SendAsync<object>("Cancel"); Message = "안전한 지점에서 현재 작업을 취소합니다."; });
             PauseCommand = Command(async () => { await _client.SendAsync<object>("Pause"); await RefreshAsync(); });
             ResumeCommand = Command(async () => { await _client.SendAsync<object>("Resume"); await RefreshAsync(); });
+            ResetInterlocksCommand = Command(async () =>
+            {
+                bool reset = await _client.SendAsync<bool>("ResetInterlocks");
+                await RefreshAfterCommandAsync();
+                Message = reset ? "인터록 Reset을 처리했습니다. 남은 차단 원인은 상태에서 확인하세요." : "해제할 수 있는 인터록이 없습니다. 원인과 복구 대기 시간을 확인하세요.";
+            });
             SearchCommand = Command(async () => { _historyOffset = 0; await LoadHistoryAsync(); });
             NextCommand = Command(async () => { if (_more) { _historyOffset += 100; await LoadHistoryAsync(); } });
             PreviousCommand = Command(async () => { _historyOffset = Math.Max(0, _historyOffset - 100); await LoadHistoryAsync(); });
@@ -80,10 +89,12 @@ namespace ExplorerManager.Presentation
             {
                 if (!_ui.InputsValid) throw new InvalidOperationException("입력 오류를 먼저 수정하세요.");
                 Settings.AllowedProcessNames = AllowedApps.Split(new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
+                Settings.InterlockProcessNames = InterlockApps.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var savedMode = Settings.LockedFileNotificationMode; int savedInterval = Settings.LockedFileNotificationIntervalSeconds;
                 await _client.SendAsync<object>("SaveSettings", Settings);
+                SetNotificationPreferences(savedMode, savedInterval);
                 _settingsLoaded = true;
-                while (_refreshing) await _refreshFinished.Task;
-                await RefreshAsync();
+                await RefreshAfterCommandAsync();
                 Message = IsServiceConnected ? "환경설정을 저장하고 복구 캐시 상태를 갱신했습니다." : "환경설정은 저장했지만 최신 상태를 조회하지 못했습니다. " + Message;
             });
             ElevateCommand = Command(() => { _ui.RunElevated(); return Task.CompletedTask; });
@@ -95,6 +106,7 @@ namespace ExplorerManager.Presentation
         public ObservableCollection<RunRecord> Runs { get; } = new ObservableCollection<RunRecord>();
         public ObservableCollection<Metric> Metrics { get; } = new ObservableCollection<Metric>();
         public ObservableCollection<AlertRecord> Alerts { get; } = new ObservableCollection<AlertRecord>();
+        public ObservableCollection<InterlockStatus> Interlocks { get; } = new ObservableCollection<InterlockStatus>();
         public ObservableCollection<ItemRecord> History { get; } = new ObservableCollection<ItemRecord>();
         public ObservableCollection<FolderSummary> Folders { get; } = new ObservableCollection<FolderSummary>();
         public ObservableCollection<RecoveryInfo> Recovery { get; } = new ObservableCollection<RecoveryInfo>();
@@ -117,6 +129,12 @@ namespace ExplorerManager.Presentation
         }
         public ThresholdMode[] Modes => (ThresholdMode[])Enum.GetValues(typeof(ThresholdMode));
         public AgeBasis[] AgeOptions => (AgeBasis[])Enum.GetValues(typeof(AgeBasis));
+        public System.Collections.Generic.KeyValuePair<AlertDeliveryMode, string>[] NotificationModes => new[]
+        {
+            new System.Collections.Generic.KeyValuePair<AlertDeliveryMode, string>(AlertDeliveryMode.Popup, "Popup"),
+            new System.Collections.Generic.KeyValuePair<AlertDeliveryMode, string>(AlertDeliveryMode.Tray, "Tray notification"),
+            new System.Collections.Generic.KeyValuePair<AlertDeliveryMode, string>(AlertDeliveryMode.LogOnly, "Log only")
+        };
         public string Message { get => _message; set => Set(ref _message, value); }
         public string Status { get => _status; private set => Set(ref _status, value); }
         public string CacheText { get => _cacheText; private set => Set(ref _cacheText, value); }
@@ -124,6 +142,11 @@ namespace ExplorerManager.Presentation
         public string TotalFreeText => Volumes.Any(v => v.HasCapacity) ? DisplayText.Bytes(Volumes.Where(v => v.HasCapacity).Sum(v => (double)v.FreeBytes)) : "측정 대기";
         public string EnabledPolicyCountText => _enabledPolicyCount + "개";
         public string AlertCountText => Alerts.Count(a => !a.Acknowledged) + "건";
+        public string InterlockSummary => !IsServiceConnected ? "인터록 상태 확인 대기" : Interlocks.Any(x => x.Blocking)
+            ? "정리 차단 " + Interlocks.Count(x => x.Blocking) + "건" : Interlocks.Count == 0 ? "인터록 표본 대기" : "차단 없음 · 상태 " + Interlocks.Count + "건";
+        public string InterlockDetails => !IsServiceConnected ? "서비스에 연결하면 현재 차단 원인을 확인할 수 있습니다." : Interlocks.Any(x => x.Blocking)
+            ? string.Join(Environment.NewLine, Interlocks.Where(x => x.Blocking).Select(x => DisplayText.State(x.Code) + " · " + x.Entity + " · " + x.Detail))
+            : "현재 차단 중인 조건이 없습니다. 세부 상태에서 측정 대기와 복구 대기 여부를 확인하세요.";
         public double CachePercent => _cacheCapacity > 0 ? Math.Max(0, Math.Min(100, _cacheUsed * 100.0 / _cacheCapacity)) : 0;
         public string CacheSummary => _cacheCapacity > 0 ? DisplayText.Bytes(_cacheUsed) + " / " + DisplayText.Bytes(_cacheCapacity) : "측정 대기";
         public string CpuText => MetricText("CPU", "CPU");
@@ -147,6 +170,7 @@ namespace ExplorerManager.Presentation
         public string Filter { get => _filter; set => Set(ref _filter, value); }
         public string RecoveryFolder { get => _folder; set => Set(ref _folder, value); }
         public string AllowedApps { get => _allowedApps; set => Set(ref _allowedApps, value); }
+        public string InterlockApps { get => _interlockApps; set => Set(ref _interlockApps, value); }
         public string HistoryPageText => "표시 위치 " + (_historyOffset + 1) + " · 최대 100건";
         public PolicyEditor SelectedPolicy { get => _selectedPolicy; set => Set(ref _selectedPolicy, value); }
         public ItemRecord SelectedItem { get => _selectedItem; set => Set(ref _selectedItem, value); }
@@ -159,7 +183,12 @@ namespace ExplorerManager.Presentation
         public AppSettings Settings
         {
             get => _settings;
-            private set { if (Set(ref _settings, value)) Changed(nameof(CacheCapacityMiB)); }
+            private set
+            {
+                if (!Set(ref _settings, value)) return;
+                foreach (string name in new[] { nameof(CacheCapacityMiB), nameof(MinimumAvailableRamMiB), nameof(HistoryMaxMiB),
+                    nameof(InterlockTripSeconds), nameof(InterlockRecoverySeconds), nameof(LockedFileNotificationIntervalSeconds) }) Changed(name);
+            }
         }
         public int CacheCapacityMiB
         {
@@ -173,6 +202,31 @@ namespace ExplorerManager.Presentation
                 Settings.CacheBytes = bytes; Changed();
             }
         }
+        public int MinimumAvailableRamMiB
+        {
+            get => checked((int)(Settings.MinimumAvailableRam / 1048576L));
+            set { Settings.MinimumAvailableRam = CheckedRange(value, 1, 1048576, "시스템 RAM 여유 한도") * 1048576L; Changed(); }
+        }
+        public int HistoryMaxMiB
+        {
+            get => checked((int)(Settings.HistoryMaxBytes / 1048576L));
+            set { Settings.HistoryMaxBytes = CheckedRange(value, 10, 102400, "이력 보관 용량") * 1048576L; Changed(); }
+        }
+        public int InterlockTripSeconds
+        {
+            get => Settings.InterlockTripSeconds;
+            set { Settings.InterlockTripSeconds = CheckedRange(value, 0, 3600, "인터록 차단 대기 시간"); Changed(); }
+        }
+        public int InterlockRecoverySeconds
+        {
+            get => Settings.InterlockRecoverySeconds;
+            set { Settings.InterlockRecoverySeconds = CheckedRange(value, 0, 3600, "인터록 복구 대기 시간"); Changed(); }
+        }
+        public int LockedFileNotificationIntervalSeconds
+        {
+            get => Settings.LockedFileNotificationIntervalSeconds;
+            set { Settings.LockedFileNotificationIntervalSeconds = CheckedRange(value, 0, 86400, "신규 잠금 알림 최소 간격"); Changed(); }
+        }
         public AsyncCommand RefreshCommand { get; }
         public AsyncCommand NewCommand { get; }
         public AsyncCommand SaveCommand { get; }
@@ -183,6 +237,7 @@ namespace ExplorerManager.Presentation
         public AsyncCommand CancelCommand { get; }
         public AsyncCommand PauseCommand { get; }
         public AsyncCommand ResumeCommand { get; }
+        public AsyncCommand ResetInterlocksCommand { get; }
         public AsyncCommand SearchCommand { get; }
         public AsyncCommand NextCommand { get; }
         public AsyncCommand PreviousCommand { get; }
@@ -204,6 +259,7 @@ namespace ExplorerManager.Presentation
             try
             {
                 var state = await _client.SendAsync<Dashboard>("Dashboard");
+                if (state.OperatorSettings != null) SetNotificationPreferences(state.OperatorSettings.LockedFileNotificationMode, state.OperatorSettings.LockedFileNotificationIntervalSeconds);
                 _isServiceConnected = true; _connectionFailed = false; _isPaused = state.Paused; _health = state.Health;
                 _lastUpdatedUtc = state.Utc; _cacheUsed = state.CacheUsed; _cacheCapacity = state.CacheCapacity;
                 _enabledPolicyCount = state.Policies.Count(x => x.Enabled);
@@ -211,6 +267,7 @@ namespace ExplorerManager.Presentation
                 CacheText = (state.CacheUsed / 1048576.0).ToString("F1") + " MiB / " + (state.CacheCapacity / 1073741824.0).ToString("F2") + " GiB";
                 string alertId = SelectedAlert?.Id, recoveryId = SelectedRecovery?.Id, recoveryFolder = RecoveryFolder;
                 SyncVolumes(state); Replace(Runs, state.Runs); Replace(Metrics, state.Metrics); Replace(Alerts, state.Alerts);
+                Replace(Interlocks, state.Interlocks ?? new System.Collections.Generic.List<InterlockStatus>());
                 SelectedAlert = Alerts.FirstOrDefault(x => x.Id == alertId);
                 if (discardPolicyChanges || SelectedPolicy == null || !SelectedPolicy.IsDirty)
                 {
@@ -232,16 +289,26 @@ namespace ExplorerManager.Presentation
                 if (!_settingsLoaded)
                 {
                     Settings = await _client.SendAsync<AppSettings>("Settings"); AllowedApps = string.Join(Environment.NewLine, Settings.AllowedProcessNames);
+                    InterlockApps = string.Join(Environment.NewLine, Settings.InterlockProcessNames ?? new System.Collections.Generic.List<string>());
+                    if (state.OperatorSettings == null) SetNotificationPreferences(Settings.LockedFileNotificationMode, Settings.LockedFileNotificationIntervalSeconds);
                     _settingsLoaded = true;
                 }
                 if (!_historyLoaded)
                 {
                     await LoadHistoryAsync(); _historyLoaded = true; Message = "준비되었습니다. 정책 저장 후 미리보기를 실행하세요.";
                 }
-                var newAlarm = state.Alerts.FirstOrDefault(a => !a.Acknowledged && a.Category == "LockedFile" && !_seen.Contains(a.Id));
-                if (newAlarm != null && !_showingAlarm && DateTime.UtcNow - _lastPopup > TimeSpan.FromMinutes(5))
+                var newAlarms = state.Alerts.Where(a => !a.Acknowledged && a.Category == "LockedFile" && !_seen.Contains(a.Id)).OrderByDescending(a => a.Utc).ToList();
+                foreach (var alarm in newAlarms) _seen.Add(alarm.Id);
+                if (newAlarms.Count > 0 && _liveNotificationMode != AlertDeliveryMode.LogOnly && !_showingAlarm &&
+                    DateTime.UtcNow - _lastPopup >= TimeSpan.FromSeconds(_liveNotificationIntervalSeconds))
                 {
-                    _showingAlarm = true; _seen.Add(newAlarm.Id); _lastPopup = DateTime.UtcNow;
+                    var newAlarm = newAlarms[0]; _lastPopup = DateTime.UtcNow;
+                    if (_liveNotificationMode == AlertDeliveryMode.Tray)
+                    {
+                        _ui.Notify("사용 중인 파일 " + newAlarms.Count + "건", newAlarm.Path + "\n" + newAlarm.Message + (newAlarms.Count > 1 ? "\n나머지 항목은 Alerts에서 확인하세요." : ""));
+                        return;
+                    }
+                    _showingAlarm = true;
                     try
                     {
                         SelectedAlert = newAlarm;
@@ -257,6 +324,7 @@ namespace ExplorerManager.Presentation
                 _isServiceConnected = false; _connectionFailed = true;
                 Append(CpuSeries, null); Append(ReadSeries, null); Append(WriteSeries, null); Append(LatencySeries, null);
                 Metrics.Clear();
+                Interlocks.Clear();
                 Status = "서비스 연결/조회 실패 · 관리자 실행과 서비스 상태를 확인하세요."; Message = ex.Message;
                 NotifyDashboard();
             }
@@ -311,6 +379,22 @@ namespace ExplorerManager.Presentation
         { target.Clear(); foreach (var value in source) target.Add(value); }
         private static void Append(ObservableCollection<double> values, double? value)
         { values.Add(value ?? double.NaN); while (values.Count > 120) values.RemoveAt(0); }
+        private static int CheckedRange(int value, int minimum, int maximum, string label)
+        {
+            if (value < minimum || value > maximum) throw new ArgumentOutOfRangeException(nameof(value), label + " 값은 " + minimum.ToString("N0") + "~" + maximum.ToString("N0") + " 정수로 입력하세요.");
+            return value;
+        }
+        private void SetNotificationPreferences(AlertDeliveryMode mode, int interval)
+        {
+            _liveNotificationMode = Enum.IsDefined(typeof(AlertDeliveryMode), mode) ? mode : AlertDeliveryMode.Popup;
+            _liveNotificationIntervalSeconds = Math.Max(0, Math.Min(86400, interval));
+        }
+        private async Task RefreshAfterCommandAsync()
+        {
+            while (_refreshing) await _refreshFinished.Task;
+            await RefreshAsync();
+        }
+        private void NotifyInterlocks() { Changed(nameof(InterlockSummary)); Changed(nameof(InterlockDetails)); }
         private string MetricText(string entity, string name, bool highest = false)
         {
             if (!IsServiceConnected || string.IsNullOrWhiteSpace(entity)) return "측정 대기";
@@ -329,6 +413,7 @@ namespace ExplorerManager.Presentation
                 nameof(CachePercent), nameof(CacheSummary), nameof(CpuText), nameof(CpuTemperatureText), nameof(IsServiceConnected), nameof(IsPaused),
                 nameof(ServiceText), nameof(HealthText), nameof(LastUpdatedText) }) Changed(name);
             NotifyDiskMetrics();
+            NotifyInterlocks();
         }
         private void SyncVolumes(Dashboard state)
         {

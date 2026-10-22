@@ -16,6 +16,20 @@
       <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Enabled policies" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding EnabledPolicyCountText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="자동 정리 사용 중" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
       <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Pending alerts" Style="{StaticResource MetricLabel}"/><TextBlock Text="{Binding AlertCountText}" Style="{StaticResource MetricNumber}"/><TextBlock Text="확인하지 않은 알림" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel></Border>
      </UniformGrid>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,24"><StackPanel>
+      <DockPanel><Button Content="Reset interlocks" Command="{Binding ResetInterlocksCommand}" DockPanel.Dock="Right"/><StackPanel><TextBlock Text="Interlocks" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding InterlockSummary}" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/></StackPanel></DockPanel>
+      <TextBlock Text="{Binding InterlockDetails}" Style="{StaticResource MutedText}" FontSize="12" Margin="0,12,0,0"/>
+      <Expander Header="상태별 세부 정보" Margin="0,12,0,0"><DataGrid ItemsSource="{Binding Interlocks}" MaxHeight="240" Margin="0,12,0,0" AutomationProperties.Name="현재 인터록 상태"><DataGrid.Columns>
+       <DataGridTextColumn Header="Condition" Binding="{Binding Code,Converter={StaticResource State}}" Width="160"/>
+       <DataGridTextColumn Header="Entity" Binding="{Binding Entity}" Width="110"/>
+       <DataGridTextColumn Header="State" Binding="{Binding State,Converter={StaticResource State}}" Width="140"/>
+       <DataGridCheckBoxColumn Header="Blocking" Binding="{Binding Blocking}" Width="80"/>
+       <DataGridCheckBoxColumn Header="Latched" Binding="{Binding Latched}" Width="75"/>
+       <DataGridTextColumn Header="Since" Binding="{Binding SinceUtc,Converter={StaticResource LocalTime}}" Width="130"/>
+       <DataGridTextColumn Header="Details" Binding="{Binding Detail}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="150"/>
+      </DataGrid.Columns></DataGrid></Expander>
+      <TextBlock Text="원인이 남아 있으면 Reset으로 해제되지 않습니다. 수동 Pause는 Resume으로, 디스크 심각 알림은 Alerts에서 별도로 처리하세요." Style="{StaticResource MutedText}" FontSize="11" Margin="0,10,0,0"/>
+     </StackPanel></Border>
      <DockPanel Margin="0,0,0,14"><StackPanel DockPanel.Dock="Left"><TextBlock Text="Drives" Style="{StaticResource SectionTitle}"/><TextBlock Text="볼륨 전체의 용량을 표시합니다. 삭제 범위는 정책에 등록한 폴더로 제한됩니다." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
      <ItemsControl ItemsSource="{Binding Volumes}" Margin="0,0,-12,12">
       <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -93,6 +107,15 @@
         <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="6" Padding="12" Margin="0,18,0,0"><StackPanel><CheckBox Content="자동 정리 활성화" IsChecked="{Binding SelectedPolicy.Enabled}" Margin="0"/><TextBlock Text="먼저 저장한 다음 Preview로 삭제 대상을 확인하세요. 활성화 시 확인 창이 표시됩니다." Style="{StaticResource MutedText}" FontSize="11" Margin="26,7,0,0"/></StackPanel></Border>
        </StackPanel></Border>
        <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+        <TextBlock Text="Schedule" Style="{StaticResource SectionTitle}"/><TextBlock Text="실행을 시작할 요일과 로컬 시각을 지정하세요. 자정을 넘는 범위는 선택한 시작 요일을 기준으로 다음 날까지 이어집니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+        <WrapPanel><CheckBox Content="Mon" IsChecked="{Binding SelectedPolicy.RunMonday}" Margin="0,0,16,12"/><CheckBox Content="Tue" IsChecked="{Binding SelectedPolicy.RunTuesday}" Margin="0,0,16,12"/><CheckBox Content="Wed" IsChecked="{Binding SelectedPolicy.RunWednesday}" Margin="0,0,16,12"/><CheckBox Content="Thu" IsChecked="{Binding SelectedPolicy.RunThursday}" Margin="0,0,16,12"/><CheckBox Content="Fri" IsChecked="{Binding SelectedPolicy.RunFriday}" Margin="0,0,16,12"/><CheckBox Content="Sat" IsChecked="{Binding SelectedPolicy.RunSaturday}" Margin="0,0,16,12"/><CheckBox Content="Sun" IsChecked="{Binding SelectedPolicy.RunSunday}" Margin="0,0,0,12"/></WrapPanel>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="Start time (HH:mm)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding SelectedPolicy.StartTime,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}" AutomationProperties.Name="실행 시작 시각 HH:mm"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="End time (HH:mm)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding SelectedPolicy.EndTime,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}" AutomationProperties.Name="실행 종료 시각 HH:mm"/></StackPanel>
+        </Grid>
+        <TextBlock Text="00:00~24:00은 하루 전체이며 24:00은 종료 시각에만 사용할 수 있습니다. 실행 종료 시각에 도달하면 안전하게 중단합니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
         <TextBlock Text="Exclusions" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제하지 않을 경로와 확장자를 지정하세요." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
         <TextBlock Text="제외 경로 · 한 줄에 한 경로" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="제외 경로 · 한 줄에 한 경로" Text="{Binding SelectedPolicy.Excluded}" AcceptsReturn="True" Height="68" VerticalScrollBarVisibility="Auto"/>
         <TextBlock Text="제외 확장자 · 쉼표로 구분" Style="{StaticResource FieldLabel}" Margin="0,16,0,6"/><TextBox AutomationProperties.Name="제외 확장자 · 쉼표로 구분" Text="{Binding SelectedPolicy.Extensions}"/>
@@ -108,11 +131,9 @@
          <StackPanel Grid.Column="2"><TextBlock Text="Read limit (MiB/s)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="Read limit (MiB/s)" Text="{Binding SelectedPolicy.ReadMiB,ValidatesOnExceptions=True}"/></StackPanel>
          <StackPanel Grid.Column="4"><TextBlock Text="처리 항목 상한" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="처리 항목 상한" Text="{Binding SelectedPolicy.ItemLimit,ValidatesOnExceptions=True}"/></StackPanel>
         </Grid>
-        <Grid Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
-         <StackPanel><TextBlock Text="시작 시각 (0~23)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="시작 시각 (0~23)" Text="{Binding SelectedPolicy.StartHour,ValidatesOnExceptions=True}"/></StackPanel>
-         <StackPanel Grid.Column="2"><TextBlock Text="종료 시각 (1~24)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="종료 시각 (1~24)" Text="{Binding SelectedPolicy.EndHour,ValidatesOnExceptions=True}"/></StackPanel>
-         <StackPanel Grid.Column="4"><TextBlock Text="스캔 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="스캔 제한 (초)" Text="{Binding SelectedPolicy.ScanLimit,ValidatesOnExceptions=True}"/></StackPanel>
-         <StackPanel Grid.Column="6"><TextBlock Text="삭제 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="삭제 제한 (초)" Text="{Binding SelectedPolicy.RunLimit,ValidatesOnExceptions=True}"/></StackPanel>
+        <Grid Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="스캔 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="스캔 제한 (초)" Text="{Binding SelectedPolicy.ScanLimit,ValidatesOnExceptions=True}"/></StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="삭제 제한 (초)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="삭제 제한 (초)" Text="{Binding SelectedPolicy.RunLimit,ValidatesOnExceptions=True}"/></StackPanel>
         </Grid>
         <TextBlock Text="캐시보다 큰 파일, 링크, 최근 파일, 복구 보호 대상은 건너뜁니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,18,0,0"/>
        </StackPanel></Expander></Border>
@@ -189,8 +210,33 @@
       <TextBlock Text="한도를 줄이면 오래된 복구본부터 즉시 제거되어 해당 항목은 복구할 수 없습니다." Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" FontSize="12" Margin="0,14,0,0"/>
       <TextBlock Text="정리·Preview·복구 작업이 없을 때 Save changes로 즉시 적용됩니다. 서비스 재시작은 필요하지 않습니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/>
      </StackPanel></Border>
-     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="History retention" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제·복구·알림 이력을 보관할 기간을 지정합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/><StackPanel Width="220" HorizontalAlignment="Left"><TextBlock Text="Retention (days)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="Retention (days)" Text="{Binding Settings.HistoryDays,ValidatesOnExceptions=True}"/></StackPanel></StackPanel></Border>
-     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="Alert thresholds" Style="{StaticResource SectionTitle}"/><TextBlock Text="경고 기준을 초과한 상태가 지정 시간 동안 지속되면 기록합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="History retention" Style="{StaticResource SectionTitle}"/><TextBlock Text="오래된 기록부터 정리합니다. 복구·진행 중 작업·미해결 알림 기록은 보존하므로 상한을 초과할 수 있습니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock Text="Retention (days)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="Retention (days)" Text="{Binding Settings.HistoryDays,ValidatesOnExceptions=True}"/></StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="History limit (MiB)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding HistoryMaxMiB,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}" AutomationProperties.Name="이력 DB 보관 용량 MiB"/><TextBlock Text="10~102,400 MiB · 기본값 2,048 MiB" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel>
+      </Grid>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+      <TextBlock Text="Interlocks" Style="{StaticResource SectionTitle}"/><TextBlock Text="CPU·RAM·디스크 상태가 기준을 벗어나면 정리를 차단합니다. 원인이 정상화된 뒤 복구 대기 시간을 적용합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock Text="RAM reserve (MiB)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding MinimumAvailableRamMiB,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}" AutomationProperties.Name="남겨둘 시스템 RAM MiB"/><TextBlock Text="1~1,048,576 MiB" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="Trip delay (sec)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding InterlockTripSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}" AutomationProperties.Name="인터록 차단 대기 시간 초"/><TextBlock Text="0~3,600초 · 0은 즉시" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel>
+       <StackPanel Grid.Column="4"><TextBlock Text="Recovery delay (sec)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding InterlockRecoverySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}" AutomationProperties.Name="인터록 복구 대기 시간 초"/><TextBlock Text="0~3,600초 · 기본값 60초" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/></StackPanel>
+      </Grid>
+      <CheckBox Content="리소스 정상화 후에도 수동 Reset까지 차단 유지" IsChecked="{Binding Settings.InterlockManualReset}" Margin="0,18,0,8"/>
+      <TextBlock Text="RAM 부족·지정 앱 실행·감시 상태 이상은 즉시 차단합니다. Trip delay는 CPU 부하·온도·디스크 지연에 적용됩니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/>
+      <TextBlock Text="차단할 앱 · 실행 파일 이름을 한 줄에 하나" Style="{StaticResource FieldLabel}" Margin="0,12,0,6"/><TextBox Text="{Binding InterlockApps,UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="80" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="정리를 차단할 앱 목록"/>
+      <TextBlock Text="예: VideoEncoder.exe · 지정 앱이 실행 중이면 정리를 차단하며 앱을 종료하지 않습니다. 비워두면 앱 조건을 사용하지 않습니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
+      <TextBlock Text="Notifications" Style="{StaticResource SectionTitle}"/><TextBlock Text="새로 발견한 사용 중인 파일 알림의 표시 방법입니다. 표시를 줄여도 Alerts와 로그에는 계속 남습니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock Text="Locked-file delivery" Style="{StaticResource FieldLabel}"/><ComboBox ItemsSource="{Binding NotificationModes}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding Settings.LockedFileNotificationMode}" AutomationProperties.Name="잠금 파일 알림 표시 방식"/></StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="Minimum interval (sec)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding LockedFileNotificationIntervalSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}" AutomationProperties.Name="신규 잠금 알림 최소 간격 초"/></StackPanel>
+      </Grid>
+      <TextBlock Text="0~86,400초 · 기본값 300초. 같은 조회에서 여러 건이 발견되면 대표 알림 한 건만 표시합니다. Save changes 후 적용되며 자동 확인·앱 종료는 수행하지 않습니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,10,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="Alert thresholds" Style="{StaticResource SectionTitle}"/><TextBlock Text="아래 자원 기준은 알림과 인터록에 사용합니다. 알림 기록에 필요한 지속 시간과 인터록 차단·복구 대기 시간은 각각 적용됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,18"/>
       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
        <StackPanel><TextBlock Text="CPU usage (%)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="CPU usage (%)" Text="{Binding Settings.CpuWarningPercent,ValidatesOnExceptions=True}"/><TextBlock Text="Disk latency (ms)" Style="{StaticResource FieldLabel}" Margin="0,18,0,6"/><TextBox AutomationProperties.Name="Disk latency (ms)" Text="{Binding Settings.DiskLatencyWarningMs,ValidatesOnExceptions=True}"/></StackPanel>
        <StackPanel Grid.Column="2"><TextBlock Text="CPU temperature (℃)" Style="{StaticResource FieldLabel}"/><TextBox AutomationProperties.Name="CPU temperature (℃)" Text="{Binding Settings.CpuTemperatureWarning,ValidatesOnExceptions=True}"/><TextBlock Text="Disk temperature (℃)" Style="{StaticResource FieldLabel}" Margin="0,18,0,6"/><TextBox AutomationProperties.Name="Disk temperature (℃)" Text="{Binding Settings.DiskTemperatureWarning,ValidatesOnExceptions=True}"/></StackPanel>

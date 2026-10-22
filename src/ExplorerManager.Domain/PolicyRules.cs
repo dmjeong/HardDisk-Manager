@@ -23,7 +23,7 @@ namespace ExplorerManager.Domain
             if (p.RetentionDays < 1 || p.RetentionDays > 36500) errors.Add("보관 기간은 1~36500일입니다.");
             if (p.IntervalSeconds < 10 || p.CooldownSeconds < 10 || p.MaxScanSeconds < 1 || p.MaxRunSeconds < 1) errors.Add("점검/대기 간격은 10초 이상이어야 합니다.");
             if (p.MaxItems < 1 || p.MaxItems > 1000000 || p.MaxDeleteBytes < 1 || p.ReadBytesPerSecond < 65536) errors.Add("작업 상한 또는 읽기 속도를 확인하세요.");
-            if (p.StartHour < 0 || p.StartHour > 23 || p.EndHour < 1 || p.EndHour > 24 || p.StartHour == p.EndHour) errors.Add("실행 시간대를 확인하세요.");
+            if (!HasValidSchedule(p)) errors.Add("실행 요일과 시간대를 확인하세요. 종료 시각 24:00은 허용되며 시작과 종료는 달라야 합니다.");
             if (p.RestoreProtectionHours < 1 || p.RestoreProtectionHours > 8760) errors.Add("복구 보호 기간은 1~8760시간입니다.");
             return errors;
         }
@@ -72,8 +72,25 @@ namespace ExplorerManager.Domain
 
         public static bool InWindow(DrivePolicy p, DateTime localNow)
         {
-            int h = localNow.Hour;
-            return p.StartHour < p.EndHour ? h >= p.StartHour && h < p.EndHour : h >= p.StartHour || h < p.EndHour;
+            if (p == null || !HasValidSchedule(p)) return false;
+            int start = p.StartHour * 60 + p.StartMinute, end = p.EndHour * 60 + p.EndMinute;
+            int now = localNow.Hour * 60 + localNow.Minute;
+            int day = (int)localNow.DayOfWeek;
+            if (start < end) return IsSelectedDay(p, day) && now >= start && now < end;
+            // An overnight window belongs to the weekday on which it starts.
+            return now >= start ? IsSelectedDay(p, day) : now < end && IsSelectedDay(p, (day + 6) % 7);
+        }
+
+        private static bool IsSelectedDay(DrivePolicy p, int day) => ((int)p.ScheduleDays & (1 << day)) != 0;
+
+        private static bool HasValidSchedule(DrivePolicy p)
+        {
+            int days = (int)p.ScheduleDays;
+            return days > 0 && (days & ~(int)ScheduleDays.All) == 0 &&
+                p.StartHour >= 0 && p.StartHour <= 23 && p.StartMinute >= 0 && p.StartMinute <= 59 &&
+                p.EndHour >= 0 && p.EndHour <= 24 && p.EndMinute >= 0 && p.EndMinute <= 59 &&
+                (p.EndHour != 24 || p.EndMinute == 0) &&
+                p.StartHour * 60 + p.StartMinute != p.EndHour * 60 + p.EndMinute;
         }
     }
 

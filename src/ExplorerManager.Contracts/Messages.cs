@@ -49,6 +49,8 @@ namespace ExplorerManager.Contracts
         public List<Metric> Metrics { get; set; } = new List<Metric>();
         public List<RunRecord> Runs { get; set; } = new List<RunRecord>();
         public List<AlertRecord> Alerts { get; set; } = new List<AlertRecord>();
+        public List<InterlockStatus> Interlocks { get; set; } = new List<InterlockStatus>();
+        public AppSettings OperatorSettings { get; set; }
     }
     public sealed class UnlockTicket
     {

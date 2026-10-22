@@ -166,6 +166,53 @@ namespace ExplorerManager.Tests
                 }
             }
         }
+        [Fact] public void HistorySizeMaintenancePreservesRecoveryIntentsAndUnresolvedAlerts()
+        {
+            using (var f = new Fixture())
+            {
+                for (int i = 0; i < 25; i++)
+                    f.Store.RecordItem(new ItemRecord { RunId = "retention", Utc = f.UtcNow, File = f.Add(@"D:\a\old-" + i, 60), State = "Skipped", Reason = new string('x', 20000) });
+                f.Store.RecordItem(new ItemRecord { RunId = "retention", Utc = f.UtcNow, File = f.Add(@"D:\a\pending", 60), State = "DeleteIntent", RecoveryState = "CacheReady" });
+                f.Store.RecordItem(new ItemRecord { RunId = "retention", Utc = f.UtcNow, File = f.Add(@"D:\a\recoverable", 60), State = "DeletedConfirmed", RecoveryState = "Recoverable" });
+                f.Store.SaveAlert(new AlertRecord { Utc = f.UtcNow, Acknowledged = false, Message = "unresolved" });
+                f.Store.SaveAlert(new AlertRecord { Utc = f.UtcNow, Acknowledged = true, Message = "resolved" });
+                f.Store.Maintain(new AppSettings { HistoryDays = 3650, HistoryMaxBytes = 256 * 1024 });
+                var history = f.Store.History(null, 0).Items;
+                Assert.Equal(2, history.Count); Assert.Contains(history, x => x.State == "DeleteIntent");
+                Assert.Contains(history, x => x.RecoveryState == "Recoverable");
+                Assert.Equal("unresolved", f.Store.Alerts().Single().Message);
+            }
+        }
+        [Fact] public void ResourceLatchPersistenceKeepsOnlyBlockingConditionsAndSurvivesReopen()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "explorer-interlock-store-" + Guid.NewGuid().ToString("N"));
+            string database = Path.Combine(directory, "audit.db");
+            try
+            {
+                using (var store = new SqliteJournal(database))
+                    store.SaveInterlocks(new[] { new InterlockStatus { Code = "LowMemory", Entity = "RAM", Blocking = true, Latched = true, State = "Tripped" },
+                        new InterlockStatus { Code = "CpuLoad", Entity = "CPU", State = "Clear" } });
+                using (var store = new SqliteJournal(database))
+                {
+                    Assert.Equal("LowMemory", store.LoadInterlocks().Single().Code);
+                    store.SaveInterlocks(new InterlockStatus[0]); Assert.Empty(store.LoadInterlocks());
+                    Assert.Equal(AppSettings.DefaultCacheBytes, store.Settings().CacheBytes);
+                }
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+        [Fact] public async Task InterlockCancellationDuringCacheCopyPreservesFileAndRecordsBlockingReason()
+        {
+            using (var f = new Fixture())
+            using (var cancellation = new CancellationTokenSource())
+            {
+                f.Add(@"D:\a\batch\file", 60);
+                var cache = new AfterCaptureCache(f.Cache, () => { f.Gate = "PausedByInterlock"; cancellation.Cancel(); });
+                var run = await f.Engine(cache: cache).RunAsync(f.Policy, false, "test", cancellation.Token);
+                Assert.Empty(f.Deleted); Assert.Empty(f.Cache.List()); Assert.Equal(0, f.Cache.Used);
+                Assert.Equal("PausedByInterlock", run.State);
+            }
+        }
         [Fact] public async Task FolderSummariesDoNotDoubleCountChildren()
         {
             using (var f = new Fixture())

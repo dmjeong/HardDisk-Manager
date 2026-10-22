@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -33,7 +34,10 @@ namespace ExplorerManager.Infrastructure
         private string _activePolicyId;
         private readonly Dictionary<string, UnlockTicket> _tickets = new Dictionary<string, UnlockTicket>();
         private readonly HashSet<string> _executingTickets = new HashSet<string>();
-        private bool _busy, _paused;
+        private bool _busy, _paused, _started, _activeSafetyChecks, _activeRespectSchedule;
+        private volatile string _activeStopReason;
+        private readonly object _interlockLogSync = new object();
+        private readonly Dictionary<string, InterlockStatus> _processInterlocks = new Dictionary<string, InterlockStatus>(StringComparer.OrdinalIgnoreCase);
         private string _health = "Ready";
         private readonly string _dataDirectory;
         private readonly Mutex _instance;
@@ -55,11 +59,13 @@ namespace ExplorerManager.Infrastructure
         }
         public void Start()
         {
+            _started = true;
             _background = new[]
             {
                 Guard(() => new PipeServer(Execute, LogError).RunAsync(_stop.Token), "IPC"),
                 Guard(() => _monitor.RunAsync(_stop.Token), "Monitoring"),
-                Guard(ScheduleAsync, "Scheduler")
+                Guard(ScheduleAsync, "Scheduler"),
+                Guard(WatchInterlocksAsync, "Interlocks")
             };
             _store.RecordEvent("ServiceStarted", "Service", _cache.Epoch, "v1.0.0");
         }
@@ -75,21 +81,108 @@ namespace ExplorerManager.Infrastructure
         }
         public string StopReason(DrivePolicy p)
         {
-            if (_paused) return "UserPaused";
-            if (_health.StartsWith("AuditUnavailable", StringComparison.Ordinal)) return "AuditUnavailable";
+            if (_activePolicyId == p.Id && _activeStopReason != null) return _activeStopReason;
             var current = _store.Policy(p.Id);
             if (current == null || current.Version != p.Version) return "PolicyChanged";
-            if (_monitor.LoadStopReason != null) return _monitor.LoadStopReason;
+            var blocked = Interlocks(p).FirstOrDefault(x => x.Blocking);
+            if (blocked == null) return null;
+            if (blocked.Code == "ManualPause") return "UserPaused";
+            if (blocked.Code == "AuditUnavailable") return "AuditUnavailable";
+            if (blocked.Code == "DiskHealth") return "PausedByHealth";
+            return "PausedByInterlock";
+        }
+        private List<InterlockStatus> Interlocks(DrivePolicy policy = null, bool includeResources = true)
+        {
+            var now = DateTime.UtcNow;
             var settings = _store.Settings();
-            if (settings.CacheBytes != _cache.Capacity) return "AuditUnavailable";
+            var result = includeResources ? _monitor.Interlocks.ToList() : new List<InterlockStatus>();
+            if (_paused) result.Add(Block("ManualPause", "Service", "사용자가 정리를 일시정지했습니다.", now));
+            if (_health.StartsWith("AuditUnavailable", StringComparison.Ordinal) || settings.CacheBytes != _cache.Capacity)
+                result.Add(Block("AuditUnavailable", "Service", "감사 기록 또는 복구 캐시 설정 일치를 확인해야 합니다. " + _health, now));
+            var age = now - _monitor.LastSampleUtc;
+            if (_started && (_monitor.LastSampleUtc == default(DateTime) || age.TotalSeconds > 20 || age.TotalSeconds < -5))
+                result.Add(Block("TelemetryUnavailable", "Monitoring", "최신 리소스 측정값이 없습니다. 정상 측정이 재개될 때까지 정리를 차단합니다.", now));
+            foreach (string name in settings.InterlockProcessNames ?? new List<string>())
+            {
+                try
+                {
+                    var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(name));
+                    int count = processes.Length;
+                    foreach (var process in processes) process.Dispose();
+                    result.Add(new InterlockStatus { Code = "ProcessRunning", Entity = name, SinceUtc = now,
+                        Blocking = count > 0, State = count > 0 ? "Tripped" : "Clear",
+                        Detail = count > 0 ? name + " 실행 중 (" + count + "개): 정리 차단" : name + " 실행되지 않음" });
+                }
+                catch (Exception ex)
+                { result.Add(Block("ProcessInspectionUnavailable", name, "프로세스 상태를 확인할 수 없습니다: " + ex.Message, now)); }
+            }
+            TrackProcessInterlocks(result);
             if (settings.PauseOnHealthCritical)
             {
-                var volume = _volumes.Get(p.VolumeId);
-                var entities = volume.PhysicalDisks.Split(',').Select(x => "Disk" + x).ToList();
-                if (_store.CriticalAlerts().Any(a => !a.Acknowledged && a.Severity == "Critical" &&
-                    (a.Entity == p.VolumeId || entities.Contains(a.Entity) || a.Entity == "Storage"))) return "PausedByHealth";
+                var entities = new List<string>();
+                bool unknownTopology = false;
+                if (policy != null)
+                {
+                    string topology = _volumes.Get(policy.VolumeId).PhysicalDisks;
+                    unknownTopology = string.IsNullOrWhiteSpace(topology) || topology == "UnknownTopology";
+                    entities = (topology ?? "").Split(',').Select(x => "Disk" + x).ToList();
+                    entities.Add(policy.VolumeId); entities.Add("Storage");
+                }
+                foreach (var alert in _store.CriticalAlerts().Where(a => !a.Acknowledged && StorageAlert(a) &&
+                    (policy == null || entities.Contains(a.Entity) || (unknownTopology && (a.Entity ?? "").StartsWith("Disk", StringComparison.OrdinalIgnoreCase)))))
+                    result.Add(new InterlockStatus { Code = "DiskHealth", Entity = alert.Entity ?? "Storage", State = "Tripped",
+                        Blocking = true, Latched = true, SinceUtc = alert.Utc, Detail = alert.Message });
             }
-            return null;
+            return result.OrderByDescending(x => x.Blocking).ThenBy(x => x.Code).ThenBy(x => x.Entity).ToList();
+        }
+        private static InterlockStatus Block(string code, string entity, string detail, DateTime now) =>
+            new InterlockStatus { Code = code, Entity = entity, Detail = detail, Blocking = true, State = "Tripped", SinceUtc = now };
+        private static bool StorageAlert(AlertRecord alert) => alert.Entity == "Storage" ||
+            (alert.Entity ?? "").StartsWith("Disk", StringComparison.OrdinalIgnoreCase) || alert.Category == "DiskIO" ||
+            alert.Category == "DiskHealth" || alert.Category == "DiskPerformance" || alert.Category == "WindowsStorageEvent";
+        private void TrackProcessInterlocks(List<InterlockStatus> all)
+        {
+            lock (_interlockLogSync)
+            {
+                var states = all.Where(x => x.Code == "ProcessRunning" || x.Code == "ProcessInspectionUnavailable").ToList();
+                foreach (var state in states)
+                {
+                    string key = state.Code + "/" + state.Entity;
+                    InterlockStatus previous;
+                    if (_processInterlocks.TryGetValue(key, out previous) && previous.Blocking == state.Blocking && previous.State == state.State)
+                        state.SinceUtc = previous.SinceUtc;
+                    else if (state.Blocking || (previous != null && previous.Blocking))
+                        _store.RecordEvent(state.Blocking ? "InterlockTripped" : "InterlockCleared", "Service", key, state.Detail);
+                }
+                foreach (var old in _processInterlocks.Where(x => x.Value.Blocking && !states.Any(n => string.Equals(n.Code + "/" + n.Entity, x.Key, StringComparison.OrdinalIgnoreCase))))
+                    _store.RecordEvent("InterlockCleared", "Service", old.Key, "프로세스 차단 조건 해소 또는 설정 변경");
+                _processInterlocks.Clear();
+                foreach (var state in states) _processInterlocks[state.Code + "/" + state.Entity] = state;
+            }
+        }
+        private async Task WatchInterlocksAsync()
+        {
+            while (!_stop.IsCancellationRequested)
+            {
+                string policyId; bool check, respectSchedule; CancellationTokenSource active;
+                lock (_sync) { policyId = _activePolicyId; active = _active; check = _busy && _activeSafetyChecks; respectSchedule = _activeRespectSchedule; }
+                if (check)
+                {
+                    string reason;
+                    try
+                    {
+                        var policy = _store.Policy(policyId);
+                        reason = policy == null ? "PolicyChanged" : StopReason(policy);
+                        if (reason == null && respectSchedule && !PolicyRules.InWindow(policy, DateTime.Now)) reason = "OutsideWindow";
+                    }
+                    catch (Exception ex) { LogError(ex); _health = "AuditUnavailable: " + ex.Message; reason = "AuditUnavailable"; }
+                    if (reason != null)
+                        lock (_sync)
+                            if (_busy && _activeSafetyChecks && _activePolicyId == policyId && ReferenceEquals(_active, active))
+                            { _activeStopReason = reason; _active?.Cancel(); }
+                }
+                await Task.Delay(1000, _stop.Token).ConfigureAwait(false);
+            }
         }
         private async Task ScheduleAsync()
         {
@@ -120,16 +213,16 @@ namespace ExplorerManager.Infrastructure
         {
             var p = _store.Policy(policyId) ?? throw new InvalidOperationException("정책을 찾을 수 없습니다.");
             PathGuard.ValidatePolicy(p, _volumes);
-            return StartOperation(async ct => { await _engine.RunAsync(p, preview, actor, ct, onlyPath).ConfigureAwait(false); }, p.Id);
+            return StartOperation(async ct => { await _engine.RunAsync(p, preview, actor, ct, onlyPath).ConfigureAwait(false); }, p.Id, false, true, !preview);
         }
-        private string StartOperation(Func<CancellationToken, Task> action, string policyId, bool allowPaused = false)
+        private string StartOperation(Func<CancellationToken, Task> action, string policyId, bool allowPaused = false, bool safetyChecks = false, bool respectSchedule = false)
         {
             lock (_sync)
             {
                 if (_busy) throw new InvalidOperationException("현재 작업이 진행 중입니다. 완료 또는 취소 후 다시 시도하세요.");
                 if (_paused && !allowPaused) throw new InvalidOperationException("전체 정리가 일시정지되어 있습니다.");
                 _busy = true; _active = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
-                _activePolicyId = policyId;
+                _activePolicyId = policyId; _activeStopReason = null; _activeSafetyChecks = safetyChecks; _activeRespectSchedule = respectSchedule;
                 string operationId = Guid.NewGuid().ToString("N");
                 _operation = Task.Run(async () =>
                 {
@@ -140,7 +233,7 @@ namespace ExplorerManager.Infrastructure
                         _health = "AuditUnavailable: " + ex.Message; LogError(ex);
                         try { _store.SaveAlert(new AlertRecord { Utc = DateTime.UtcNow, Category = "OperationError", Severity = "Critical", Message = ex.Message, PolicyId = policyId }); } catch { }
                     }
-                    finally { lock (_sync) { _lastRun[policyId ?? "restore"] = DateTime.UtcNow; _busy = false; _active.Dispose(); _active = null; _activePolicyId = null; } }
+                    finally { lock (_sync) { _lastRun[policyId ?? "restore"] = DateTime.UtcNow; _busy = false; _active.Dispose(); _active = null; _activePolicyId = null; _activeStopReason = null; _activeSafetyChecks = false; } }
                 });
                 return operationId;
             }
@@ -175,28 +268,47 @@ namespace ExplorerManager.Infrastructure
                 case "Dashboard":
                     return new Dashboard { Utc = DateTime.UtcNow, IsOperator = caller.Operator, Paused = _paused, Health = _health,
                         CacheEpoch = _cache.Epoch, CacheCapacity = _cache.Capacity, CacheUsed = _cache.Used, Volumes = _volumes.List().ToList(),
-                        Policies = _store.Policies(), Metrics = _monitor.Snapshot().ToList(), Runs = _store.Runs(), Alerts = _store.Alerts() };
+                        Policies = _store.Policies(), Metrics = _monitor.Snapshot().ToList(), Runs = _store.Runs(), Alerts = _store.Alerts(),
+                        Interlocks = Interlocks(), OperatorSettings = _store.Settings() };
                 case "SavePolicy":
                     var p = d.ToObject<DrivePolicy>(); PathGuard.ValidatePolicy(p, _volumes);
                     foreach (var other in _store.Policies().Where(x => x.Id != p.Id))
                         if (other.Roots.Any(a => p.Roots.Any(b => PathGuard.Within(a, b) || PathGuard.Within(b, a)))) throw new ArgumentException("다른 정책과 관리 경로가 중복됩니다.");
                     _store.RecordEvent("PolicyChanged", caller.Sid, p.Id, JsonConvert.SerializeObject(p, Protocol.Json));
-                    lock (_sync) { if (_activePolicyId == p.Id) _active?.Cancel(); }
-                    return _store.SavePolicy(p);
+                    var savedPolicy = _store.SavePolicy(p);
+                    lock (_sync) { if (_activePolicyId == p.Id) { _activeStopReason = "PolicyChanged"; _active?.Cancel(); } }
+                    return savedPolicy;
                 case "DeletePolicy":
                     string id = Required(d, "Id"); lock (_sync) { if (_busy) throw new InvalidOperationException("작업 종료 후 정책을 삭제하세요."); }
                     _store.RecordEvent("PolicyDeleted", caller.Sid, id, ""); _store.DeletePolicy(id); return true;
                 case "Preview": return StartCleanup(Required(d, "Id"), true, caller.Sid);
                 case "Run": return StartCleanup(Required(d, "Id"), false, caller.Sid);
                 case "Cancel": lock (_sync) _active?.Cancel(); return true;
-                case "Pause": _paused = true; lock (_sync) _active?.Cancel(); _store.RecordEvent("Paused", caller.Sid, "", ""); return true;
-                case "Resume": _paused = false; _health = "Ready"; _store.RecordEvent("Resumed", caller.Sid, "", ""); return true;
+                case "Pause": _paused = true; lock (_sync) { _activeStopReason = "UserPaused"; _active?.Cancel(); } _store.RecordEvent("Paused", caller.Sid, "", ""); return true;
+                case "Resume":
+                    if (_health.StartsWith("AuditUnavailable", StringComparison.Ordinal) || _store.Settings().CacheBytes != _cache.Capacity)
+                        throw new InvalidOperationException("감사 기록/설정 오류를 해결한 뒤 Reset interlocks로 확인하세요. Resume는 이 차단을 해제하지 않습니다.");
+                    _store.RecordEvent("Resumed", caller.Sid, "", ""); _paused = false; return true;
+                case "ResetInterlocks":
+                    if (_store.Settings().CacheBytes != _cache.Capacity)
+                        throw new InvalidOperationException("복구 캐시 설정과 실행 용량이 다릅니다. 서비스 재시작이 필요합니다.");
+                    if (_health.StartsWith("AuditUnavailable", StringComparison.Ordinal))
+                    {
+                        _store.RecordEvent("AuditWriteVerified", caller.Sid, "Service", "Interlock Reset 전 감사 기록 쓰기 확인");
+                        _health = "Ready";
+                    }
+                    var hardBlocks = Interlocks(null, false).Where(x => x.Blocking && x.Code != "ManualPause").ToList();
+                    if (hardBlocks.Count > 0) throw new InvalidOperationException("차단 조건이 남아 있습니다: " + string.Join("; ", hardBlocks.Select(x => x.Detail)));
+                    if (!_monitor.ResetInterlocks()) throw new InvalidOperationException("위험 조건 또는 안정 회복 대기 중에는 Interlock을 Reset할 수 없습니다.");
+                    _store.RecordEvent("InterlocksReset", caller.Sid, "Monitoring", "안전 조건 재확인 완료"); return true;
                 case "History": return _store.History((string)d["Filter"], Math.Min(1000000, Math.Max(0, (int?)d["Offset"] ?? 0)), (string)d["RunId"]);
                 case "Folders": return _store.Folders((string)d["Filter"], Math.Min(1000000, Math.Max(0, (int?)d["Offset"] ?? 0)));
                 case "Recovery": return _cache.List();
                 case "Settings": return _store.Settings();
                 case "SaveSettings":
                     var settings = d.ToObject<AppSettings>(); ValidateSettings(settings);
+                    settings.InterlockProcessNames = settings.InterlockProcessNames.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    var oldSettings = _store.Settings();
                     lock (_sync)
                     {
                         if (settings.CacheBytes == _cache.Capacity) _store.SaveSettings(settings, caller.Sid);
@@ -214,6 +326,11 @@ namespace ExplorerManager.Infrastructure
                                 throw;
                             }
                         }
+                    }
+                    if (settings.HistoryDays < oldSettings.HistoryDays || settings.HistoryMaxBytes < oldSettings.HistoryMaxBytes)
+                    {
+                        try { _store.Maintain(settings); }
+                        catch (Exception ex) { _health = "AuditUnavailable: " + ex.Message; throw; }
                     }
                     return true;
                 case "Restore":
@@ -296,6 +413,14 @@ namespace ExplorerManager.Infrastructure
         {
             if (s == null || s.CacheBytes < AppSettings.MinimumCacheBytes || s.CacheBytes > AppSettings.MaximumCacheBytes)
                 throw new ArgumentException("RAM 보관 용량은 1~16384 MiB 범위입니다.");
+            if (s.MinimumAvailableRam < 1048576L || s.MinimumAvailableRam > 1048576L * 1048576 ||
+                s.InterlockTripSeconds < 0 || s.InterlockTripSeconds > 3600 ||
+                s.InterlockRecoverySeconds < 0 || s.InterlockRecoverySeconds > 3600 ||
+                !Enum.IsDefined(typeof(AlertDeliveryMode), s.LockedFileNotificationMode) ||
+                s.LockedFileNotificationIntervalSeconds < 0 || s.LockedFileNotificationIntervalSeconds > 86400 ||
+                s.InterlockProcessNames == null || s.InterlockProcessNames.Count > 100 ||
+                s.InterlockProcessNames.Any(x => !ValidProcessName(x)))
+                throw new ArgumentException("Interlock RAM·시간·프로세스 목록 또는 알림 설정 범위를 확인하세요.");
             if (s.HistoryDays < 1 || s.HistoryDays > 3650 ||
                 s.HistoryMaxBytes < 10485760 || s.HistoryMaxBytes > 100L * 1073741824 || s.AnomalyDurationSeconds < 10 || s.AnomalyDurationSeconds > 3600 ||
                 s.CpuWarningPercent < 1 || s.CpuWarningPercent > 100 || !Finite(s.CpuWarningPercent) ||
@@ -306,6 +431,9 @@ namespace ExplorerManager.Infrastructure
                 throw new ArgumentException("환경설정 범위를 확인하세요.");
         }
         private static bool Finite(double n) => !double.IsNaN(n) && !double.IsInfinity(n);
+        private static bool ValidProcessName(string name) => !string.IsNullOrWhiteSpace(name) && name.Length <= 128 &&
+            name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && name.Length > 4 &&
+            name.IndexOfAny(new[] { '\\', '/', ':', '*', '?', '"', '<', '>', '|', '\0', '\n', '\r' }) < 0;
         public void LogError(Exception ex)
         {
             lock (_logSync)

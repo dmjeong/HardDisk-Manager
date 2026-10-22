@@ -123,6 +123,15 @@ PRAGMA user_version=1;";
                 tx.Commit();
             }
         }
+        public IList<InterlockStatus> LoadInterlocks()
+        {
+            lock (_sync) return Read<List<InterlockStatus>>("SELECT json FROM settings WHERE id='resource-interlocks'").SingleOrDefault() ?? new List<InterlockStatus>();
+        }
+        public void SaveInterlocks(IEnumerable<InterlockStatus> statuses)
+        {
+            lock (_sync) Exec("INSERT OR REPLACE INTO settings VALUES('resource-interlocks',$0)",
+                Json(statuses.Where(x => x.Blocking || x.Latched).ToList()));
+        }
         public void SaveRun(RunRecord r) { lock (_sync) Exec("INSERT OR REPLACE INTO runs VALUES($0,$1,$2)", r.Id, r.StartedUtc.ToString("O"), Json(r)); }
         public List<RunRecord> Runs(int limit = 50) { lock (_sync) return Read<RunRecord>("SELECT json FROM runs ORDER BY utc DESC LIMIT $0", Math.Min(200, limit)); }
         public void RecordItem(ItemRecord i)
@@ -265,10 +274,16 @@ ON CONFLICT(bucket,entity,name) DO UPDATE SET sum=sum+excluded.sum,min=min(min,e
                 {
                     Exec("DELETE FROM items WHERE id IN (SELECT id FROM items WHERE recovery NOT IN ('Recoverable','OutcomeUnknown','CacheReady') AND state NOT IN ('DeleteIntent','DeleteRequested') ORDER BY utc LIMIT 1000)");
                     Exec("DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY id LIMIT 1000)");
+                    Exec("DELETE FROM metrics WHERE rowid IN (SELECT rowid FROM metrics ORDER BY bucket LIMIT 1000)");
+                    Exec("DELETE FROM alerts WHERE id IN (SELECT id FROM alerts WHERE ack=1 ORDER BY utc LIMIT 1000)");
                     Exec("DELETE FROM runs WHERE id NOT IN (SELECT runid FROM items) AND utc<$0", DateTime.UtcNow.AddDays(-1).ToString("O"));
                     Exec("PRAGMA incremental_vacuum(1000)");
                 }
                 Exec("PRAGMA wal_checkpoint(TRUNCATE)");
+                long remaining = LiveDatabaseBytes();
+                if (remaining > settings.HistoryMaxBytes)
+                    RecordEvent("HistoryLimitProtected", "Service", "History",
+                        "보호 중인 복구/진행/미해결 기록 등으로 보관 상한을 초과했습니다: " + remaining + " / " + settings.HistoryMaxBytes + " bytes");
             }
         }
         private long LiveDatabaseBytes()
