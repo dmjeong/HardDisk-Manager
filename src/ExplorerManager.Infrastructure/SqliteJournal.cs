@@ -118,7 +118,7 @@ PRAGMA user_version=1;";
                 { c.Transaction = tx; c.ExecuteNonQuery(); }
                 if (actor != null)
                     using (var c = Command("INSERT INTO events(utc,action,actor,entity,detail) VALUES($0,'SettingsChanged',$1,'',$2)",
-                        DateTime.UtcNow.ToString("O"), actor, "Recovery cache: " + settings.CacheBytes + " bytes"))
+                        DateTime.UtcNow.ToString("O"), actor, Json(settings)))
                     { c.Transaction = tx; c.ExecuteNonQuery(); }
                 tx.Commit();
             }

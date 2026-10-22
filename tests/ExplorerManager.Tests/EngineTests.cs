@@ -156,6 +156,14 @@ namespace ExplorerManager.Tests
                 using (var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + Path.Combine(f.DirectoryPath, "test.db") + ";Pooling=False"))
                 {
                     connection.Open();
+                    using (var audit = connection.CreateCommand())
+                    {
+                        audit.CommandText = "SELECT detail FROM events WHERE action='SettingsChanged' ORDER BY id DESC LIMIT 1";
+                        var saved = Newtonsoft.Json.Linq.JObject.Parse((string)audit.ExecuteScalar());
+                        Assert.Equal(256L * 1048576, (long)saved["CacheBytes"]);
+                        Assert.Equal(60, (int)saved["InterlockTripSeconds"]);
+                        Assert.Equal(300, (int)saved["LockedFileNotificationIntervalSeconds"]);
+                    }
                     using (var command = connection.CreateCommand())
                     {
                         command.CommandText = "CREATE TRIGGER fail_settings_audit BEFORE INSERT ON events WHEN NEW.action='SettingsChanged' BEGIN SELECT RAISE(ABORT,'audit unavailable'); END";
