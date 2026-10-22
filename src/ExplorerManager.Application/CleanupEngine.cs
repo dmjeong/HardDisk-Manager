@@ -113,16 +113,17 @@ namespace ExplorerManager.Application
                         _cache.Commit(cached.Id, absent);
                         item.State = absent ? "DeletedConfirmed" : "OutcomeUnknown";
                         item.RecoveryState = absent ? "Recoverable" : "OutcomeUnknown";
-                        if (absent) item.FreeAfter = _volumes.Get(policy.VolumeId).FreeBytes;
+                        var afterDeletion = absent ? _volumes.Get(policy.VolumeId) : null;
+                        if (absent) item.FreeAfter = afterDeletion.FreeBytes;
                         _journal.RecordItem(item);
                         if (absent)
                         {
                             if (item.File.IsDirectory) run.DeletedDirectories++; else { run.DeletedFiles++; run.DeletedBytes += item.Bytes; }
-                            run.FreeAfter = _volumes.Get(policy.VolumeId).FreeBytes;
+                            run.FreeAfter = afterDeletion.FreeBytes;
                             if (onlyPath == null)
                             {
                                 activeUnitStarted = true;
-                                stopAfterUnit |= PolicyRules.TargetReached(policy, _volumes.Get(policy.VolumeId));
+                                stopAfterUnit |= PolicyRules.TargetReached(policy, afterDeletion);
                                 var parent = _files.FindEmptyParent(item.File, policy, run.CutoffUtc);
                                 if (parent != null && string.Equals(PolicyRules.CleanupUnitPath(parent), activeUnit, StringComparison.OrdinalIgnoreCase))
                                     _journal.AddCandidate(run.Id, parent);

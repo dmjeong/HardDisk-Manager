@@ -25,6 +25,7 @@ namespace ExplorerManager.Tests
         public bool ScanTimeout;
         public string Gate;
         public Action<FileSnapshot> AfterDelete;
+        public Action<VolumeStatus> AfterSpaceRead;
         public Func<FileSnapshot, FileSnapshot> EmptyParent;
         public Fixture() { Directory.CreateDirectory(DirectoryPath); Store = new SqliteJournal(Path.Combine(DirectoryPath, "test.db")); Cache = new RecoveryCache(1024 * 1024, Store.SetRecoveryState); }
         public CleanupEngine Engine(IJournal journal = null, IRecoveryCache cache = null) => new CleanupEngine(this, this, journal ?? Store, cache ?? Cache, this, this, this);
@@ -35,7 +36,8 @@ namespace ExplorerManager.Tests
             Files.Add(f); return f;
         }
         public IList<VolumeStatus> List() => new[] { Get("volume") };
-        public VolumeStatus Get(string id) => new VolumeStatus { Id = "volume", TotalBytes = 1000, FreeBytes = Free };
+        public VolumeStatus Get(string id)
+        { var snapshot = new VolumeStatus { Id = "volume", TotalBytes = 1000, FreeBytes = Free }; AfterSpaceRead?.Invoke(snapshot); return snapshot; }
         public DateTime UtcNow { get; } = new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc);
         public string StopReason(DrivePolicy p) => Gate;
         public IList<ProcessIdentity> Inspect(string p) => new List<ProcessIdentity>();
@@ -199,6 +201,20 @@ namespace ExplorerManager.Tests
                 var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
                 Assert.Equal(2, f.Deleted.Count); Assert.DoesNotContain(@"D:\a\other\middle", f.Deleted);
                 Assert.Equal("TargetReached", run.State); Assert.Equal(-100, run.ObservedFreeDelta);
+            }
+        }
+        [Fact] public async Task LatchesTheSameSpaceObservationRecordedInHistory()
+        {
+            using (var f = new Fixture())
+            {
+                var first = f.Add(@"D:\a\batch\first", 80, 120); f.Add(@"D:\a\other\middle", 70); f.Add(@"D:\a\batch\last", 40);
+                bool consumeNextRead = false;
+                f.AfterDelete = file => { if (file.Path == first.Path) consumeNextRead = true; };
+                f.AfterSpaceRead = snapshot => { if (consumeNextRead) { f.Free = 0; consumeNextRead = false; } };
+                var run = await f.Engine().RunAsync(f.Policy, false, "test", CancellationToken.None);
+                Assert.Equal(2, f.Deleted.Count); Assert.DoesNotContain(@"D:\a\other\middle", f.Deleted);
+                Assert.Equal(220, f.Store.History(null, 0).Items.Single(x => x.Path == first.Path).FreeAfter);
+                Assert.Equal("TargetReached", run.State);
             }
         }
         [Fact] public async Task TargetDuringLaterCaptureDoesNotInterruptStartedFolder()
