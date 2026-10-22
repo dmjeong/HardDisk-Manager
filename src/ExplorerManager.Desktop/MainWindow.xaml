@@ -24,7 +24,7 @@
         <StackPanel>
          <DockPanel Margin="0,0,0,20"><Border DockPanel.Dock="Right" Style="{StaticResource Badge}"><TextBlock Text="{Binding StateText}" FontSize="11"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource WarningBrush}"/><Style.Triggers><DataTrigger Binding="{Binding IsReady}" Value="True"><Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Border><StackPanel Orientation="Horizontal"><Border Background="{StaticResource HoverBrush}" CornerRadius="8" Width="36" Height="36" Margin="0,0,12,0"><TextBlock Text="&#xEDA2;" FontFamily="Segoe MDL2 Assets" FontSize="18" HorizontalAlignment="Center"/></Border><StackPanel><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Text="{Binding FileSystem}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/></StackPanel></StackPanel></DockPanel>
          <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Right" Text="{Binding UsedPercentText}" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding FreeText,StringFormat=여유 {0}}" FontSize="22" FontWeight="SemiBold"/></DockPanel>
-         <ProgressBar Value="{Binding UsedPercent}" Maximum="100" AutomationProperties.Name="드라이브 사용률"/>
+         <ProgressBar Value="{Binding UsedPercent,Mode=OneWay}" Maximum="100" AutomationProperties.Name="드라이브 사용률"/>
          <DockPanel Margin="0,10,0,0"><TextBlock Text="{Binding CapacityText,StringFormat=전체 {0}}" DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="11"/><TextBlock Text="{Binding UsedText,StringFormat=사용 {0}}" Style="{StaticResource MutedText}" FontSize="11"/></DockPanel>
         </StackPanel>
        </Border>
@@ -33,21 +33,23 @@
      <Border Style="{StaticResource Card}" Visibility="{Binding Volumes.Count,Converter={StaticResource EmptyVisibility}}" Margin="0,0,0,24"><StackPanel><TextBlock Text="드라이브 정보를 기다리고 있습니다" Style="{StaticResource SectionTitle}"/><TextBlock Text="서비스 연결과 드라이브 연결 상태를 확인하세요." Style="{StaticResource MutedText}"/></StackPanel></Border>
      <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Border Style="{StaticResource Card}"><StackPanel><DockPanel><TextBlock Text="CPU 사용률" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding CpuText}" HorizontalAlignment="Right" FontSize="18" FontWeight="SemiBold"/></DockPanel><local:Sparkline Values="{Binding CpuSeries}" Unit="%" Maximum="100" Height="112" Margin="0,10,0,0" AutomationProperties.Name="CPU 사용률 추이"/></StackPanel></Border>
-      <Border Grid.Column="2" Style="{StaticResource Card}"><StackPanel><TextBlock Text="복구 캐시" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding CacheSummary}" FontSize="17" FontWeight="SemiBold" Margin="0,14,0,12"/><ProgressBar Value="{Binding CachePercent}" Maximum="100"/><TextBlock Text="최근 삭제본을 RAM에 임시 보관합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,14,0,0"/><TextBlock Text="서비스 재시작 시 보관본이 사라집니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/></StackPanel></Border>
+      <Border Grid.Column="2" Style="{StaticResource Card}"><StackPanel><TextBlock Text="복구 캐시" Style="{StaticResource SectionTitle}"/><TextBlock Text="{Binding CacheSummary}" FontSize="17" FontWeight="SemiBold" Margin="0,14,0,12"/><ProgressBar Value="{Binding CachePercent,Mode=OneWay}" Maximum="100"/><TextBlock Text="최근 삭제본을 RAM에 임시 보관합니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,14,0,0"/><TextBlock Text="서비스 재시작 시 보관본이 사라집니다." Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0"/></StackPanel></Border>
      </Grid>
      <DockPanel Margin="0,0,0,12"><Button DockPanel.Dock="Right" Content="현재 작업 취소" Command="{Binding CancelCommand}" Style="{StaticResource GhostButton}"/><StackPanel><TextBlock Text="최근 정리 작업" Style="{StaticResource SectionTitle}"/><TextBlock Text="미리보기 결과와 실제 삭제 내역을 확인하세요." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
      <Border Style="{StaticResource Card}" Padding="0" ClipToBounds="True"><Grid>
-      <DataGrid ItemsSource="{Binding Runs}" MaxHeight="300"><DataGrid.Columns>
-       <DataGridTextColumn Header="시작 시각" Binding="{Binding StartedUtc,Converter={StaticResource LocalTime}}" Width="136"/>
-       <DataGridTextColumn Header="정책" Binding="{Binding PolicyName}" Width="150"/>
-       <DataGridCheckBoxColumn Header="미리보기" Binding="{Binding DryRun}" Width="74"/>
-       <DataGridTextColumn Header="결과" Binding="{Binding State,Converter={StaticResource State}}" Width="140"/>
-       <DataGridTextColumn Header="파일" Binding="{Binding DeletedFiles,StringFormat=N0}" Width="65"/>
-       <DataGridTextColumn Header="폴더" Binding="{Binding DeletedDirectories,StringFormat=N0}" Width="65"/>
-       <DataGridTextColumn Header="삭제 용량" Binding="{Binding DeletedBytes,Converter={StaticResource Bytes}}" Width="106"/>
-       <DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,Converter={StaticResource Bytes}}" Width="112"/>
-       <DataGridTextColumn Header="상세" Binding="{Binding Detail}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="100"/>
-      </DataGrid.Columns></DataGrid>
+      <DataGrid ItemsSource="{Binding Runs}" MaxHeight="300">
+       <DataGrid.RowStyle><Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}"><Setter Property="ToolTip" Value="{Binding Detail}"/></Style></DataGrid.RowStyle>
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="시작 시각" Binding="{Binding StartedUtc,Converter={StaticResource LocalTime}}" Width="130"/>
+        <DataGridTextColumn Header="정책" Binding="{Binding PolicyName}" ElementStyle="{StaticResource PathText}" Width="*" MinWidth="140"/>
+        <DataGridCheckBoxColumn Header="미리보기" Binding="{Binding DryRun}" Width="74"/>
+        <DataGridTextColumn Header="결과" Binding="{Binding State,Converter={StaticResource State}}" Width="132"/>
+        <DataGridTemplateColumn Header="정리 대상" Width="126"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Candidates,StringFormat={}{0:N0}개}"/><TextBlock Text="{Binding CandidateBytes,Converter={StaticResource Bytes}}" Foreground="{StaticResource MutedBrush}" FontSize="11"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="삭제 항목" Width="126"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding DeletedFiles,StringFormat=파일 {0:N0}개}"/><TextBlock Text="{Binding DeletedDirectories,StringFormat=폴더 {0:N0}개}" Foreground="{StaticResource MutedBrush}" FontSize="11"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+        <DataGridTextColumn Header="삭제 용량" Binding="{Binding DeletedBytes,Converter={StaticResource Bytes}}" Width="106"/>
+        <DataGridTextColumn Header="여유 순변화" Binding="{Binding ObservedFreeDelta,Converter={StaticResource Bytes}}" Width="112"/>
+       </DataGrid.Columns>
+      </DataGrid>
       <StackPanel Style="{StaticResource EmptyState}" Visibility="{Binding Runs.Count,Converter={StaticResource EmptyVisibility}}"><TextBlock Text="아직 정리 작업이 없습니다" HorizontalAlignment="Center"/><TextBlock Text="정책을 저장하고 미리보기를 실행하면 이곳에 표시됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,8,0,0"/></StackPanel>
      </Grid></Border>
     </StackPanel>
@@ -139,7 +141,7 @@
   </TabItem>
   <TabItem Header="복구 센터" Tag="&#xE777;" ToolTip="RAM에 남아 있는 최근 삭제 항목을 복구하세요.">
    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-    <Border Style="{StaticResource Card}" Margin="0,0,0,20"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="최근 삭제본을 잠시 보관합니다" Style="{StaticResource SectionTitle}"/><TextBlock Text="최대 1 GiB RAM 캐시 · 오래된 보관본부터 제거됩니다." Style="{StaticResource MutedText}" Margin="0,5,24,0"/><TextBlock Text="서비스 재시작·전원 종료 후에는 복구할 수 없습니다." Foreground="{StaticResource WarningBrush}" FontSize="12" Margin="0,10,0,0"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding CacheSummary}" HorizontalAlignment="Right" FontSize="17" Margin="0,0,0,12"/><ProgressBar Value="{Binding CachePercent}" Maximum="100"/></StackPanel></Grid></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,20"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="최근 삭제본을 잠시 보관합니다" Style="{StaticResource SectionTitle}"/><TextBlock Text="최대 1 GiB RAM 캐시 · 오래된 보관본부터 제거됩니다." Style="{StaticResource MutedText}" Margin="0,5,24,0"/><TextBlock Text="서비스 재시작·전원 종료 후에는 복구할 수 없습니다." Foreground="{StaticResource WarningBrush}" FontSize="12" Margin="0,10,0,0"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding CacheSummary}" HorizontalAlignment="Right" FontSize="17" Margin="0,0,0,12"/><ProgressBar Value="{Binding CachePercent,Mode=OneWay}" Maximum="100"/></StackPanel></Grid></Border>
     <Grid Grid.Row="1" Margin="0,0,0,18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <StackPanel Orientation="Horizontal" Margin="0,0,0,16"><Button Content="선택 항목 복구" Command="{Binding RestoreCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="다른 폴더로 복구…" Command="{Binding RestoreElsewhereCommand}" Margin="8,0,0,0"/></StackPanel>
      <DockPanel Grid.Row="1"><Button DockPanel.Dock="Right" Content="폴더 내 보관 항목 복구" Command="{Binding RestoreFolderCommand}" Margin="8,0,0,0"/><TextBox Text="{Binding RecoveryFolder}" ToolTip="복구할 원래 폴더 경로" AutomationProperties.Name="복구할 폴더 경로"/></DockPanel>

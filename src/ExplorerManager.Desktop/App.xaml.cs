@@ -20,6 +20,14 @@ namespace ExplorerManager.Desktop
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            if (e.Args.Contains("--smoke"))
+            {
+                int logAt = Array.IndexOf(e.Args, "--screenshot");
+                string logDirectory = logAt >= 0 && logAt + 1 < e.Args.Length
+                    ? Path.GetDirectoryName(Path.GetFullPath(e.Args[logAt + 1])) : Environment.CurrentDirectory;
+                DispatcherUnhandledException += (sender, args) =>
+                    File.WriteAllText(Path.Combine(logDirectory, "wpf-startup-error.log"), args.Exception.ToString());
+            }
             var window = new MainWindow(); MainWindow = window;
             var ui = new UiAdapters(window, (title, message) => _tray?.ShowBalloonTip(4000, title, message, Forms.ToolTipIcon.Warning));
             var vm = new MainViewModel(new PipeClient(), ui); window.DataContext = vm;
