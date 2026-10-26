@@ -20,6 +20,16 @@
     "project": "https://github.com/Blacktempel/DiskInfoToolkit"
   },
   {
+    "package": "FluentFTP/55.1.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/robinrodricks/FluentFTP",
+      "commit": "f051d6425342bc99617d933af3580f718c381f64"
+    },
+    "project": "https://github.com/robinrodricks/FluentFTP"
+  },
+  {
     "package": "HidSharp/2.6.4",
     "license": "LICENSE.txt",
     "repository": {},

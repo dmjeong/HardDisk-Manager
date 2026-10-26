@@ -13,5 +13,5 @@ else {
 if (-not $testConsole) { throw 'Visual Studio Test Explorer / Test Tools are required to run the .NET Framework tests.' }
 $assembly=Join-Path $repo "tests/ExplorerManager.Tests/bin/$Configuration/net48/ExplorerManager.Tests.dll"
 if (-not (Test-Path $assembly)) { throw 'Build the solution before running scripts/Test.ps1.' }
-& $testConsole $assembly /Platform:x64 '/Framework:.NETFramework,Version=v4.8' "/TestAdapterPath:$(Split-Path $assembly -Parent)" "/ResultsDirectory:$repo/artifacts/TestResults" '/Logger:trx;LogFileName=windows.trx'
+& $testConsole $assembly /Platform:x64 '/Framework:.NETFramework,Version=v4.8' "/TestAdapterPath:$(Split-Path $assembly -Parent)" "/ResultsDirectory:$repo/artifacts/TestResults" '/Logger:trx;LogFileName=windows.trx' '/Logger:console;verbosity=detailed' '/Blame' "/Settings:$PSScriptRoot/tests.runsettings" "/Diag:$repo/artifacts/test-platform.log"
 if ($LASTEXITCODE -ne 0) { throw "Tests failed: $LASTEXITCODE" }

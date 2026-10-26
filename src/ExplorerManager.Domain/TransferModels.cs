@@ -218,7 +218,8 @@ namespace ExplorerManager.Domain
                 c.Port < 1 || c.Port > 65535 || string.IsNullOrWhiteSpace(c.UserName) || c.UserName.Length > 256 ||
                 c.UserName.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0 || !Enum.IsDefined(typeof(TransferEncryption), c.Encryption) ||
                 c.ConnectTimeoutSeconds < 1 || c.ConnectTimeoutSeconds > 300 || c.CommandTimeoutSeconds < 1 || c.CommandTimeoutSeconds > 600 ||
-                c.NoProgressTimeoutSeconds < 5 || c.NoProgressTimeoutSeconds > 3600 || c.MaxConnections < 1 || c.MaxConnections > 8)
+                c.NoProgressTimeoutSeconds < 5 || c.NoProgressTimeoutSeconds > 3600 || c.MaxConnections < 1 || c.MaxConnections > 8 ||
+                string.IsNullOrWhiteSpace(c.EncodingName) || c.EncodingName.Length > 64)
                 throw new ArgumentException("FTP 연결 이름·주소·포트·계정·timeout 범위를 확인하세요.");
             Encoding.GetEncoding(c.EncodingName, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
         }
@@ -227,7 +228,7 @@ namespace ExplorerManager.Domain
             Guid id;
             if (p == null || !Guid.TryParseExact(p.Id, "N", out id) || string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 100 ||
                 string.IsNullOrWhiteSpace(p.VolumeId) || string.IsNullOrWhiteSpace(p.ConnectionId) || string.IsNullOrWhiteSpace(p.LocalRoot) ||
-                p.Extensions == null || p.Extensions.Count == 0 || p.Extensions.Count > 50 || p.Extensions.Any(x => x.Length < 2 || x.Length > 16 || !x.StartsWith(".") || x.Skip(1).Any(ch => !char.IsLetterOrDigit(ch))) ||
+                p.Extensions == null || p.Extensions.Count == 0 || p.Extensions.Count > 50 || p.Extensions.Any(x => x == null || x.Length < 2 || x.Length > 16 || !x.StartsWith(".") || x.Skip(1).Any(ch => !char.IsLetterOrDigit(ch))) ||
                 p.Exclusions == null || p.Exclusions.Count > 100 || p.Exclusions.Any(x => !Within(x, p.LocalRoot)) ||
                 p.StableSeconds < 2 || p.StableSeconds > 3600 || p.ReconcileSeconds < 30 || p.ReconcileSeconds > 86400 ||
                 p.MaxScanSeconds < 30 || p.MaxScanSeconds > 86400 || p.ContentAuditHours < 0 || p.ContentAuditHours > 8760 || p.Priority < 1 || p.Priority > 5 || p.MaxFileBytes < 1 || p.MaxFileBytes > 16L * 1073741824 ||

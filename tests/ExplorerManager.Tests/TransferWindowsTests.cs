@@ -159,7 +159,7 @@ namespace ExplorerManager.Tests
                     id = Register(runtime, server).Id;
                     Assert.Throws<UnauthorizedAccessException>(() => runtime.Execute(new Request { Command = "TransferOverview" }, new Caller { Operator = false, Sid = "untrusted" }));
                 }
-                using (var db = new SqliteConnection("Data Source=" + Path.Combine(f.Data, "manager.db")))
+                using (var db = new SqliteConnection("Data Source=" + Path.Combine(f.Data, "manager.db") + ";Pooling=False"))
                 {
                     db.Open(); using (var cmd = db.CreateCommand()) {
                         cmd.CommandText = "SELECT value FROM transfer_secrets WHERE id=$id"; cmd.Parameters.AddWithValue("$id", id); var cipher = (byte[])cmd.ExecuteScalar();
@@ -185,11 +185,13 @@ namespace ExplorerManager.Tests
                     trust.Open(OpenFlags.ReadWrite); trust.Add(certificate);
                     try
                     {
-                        using (var server = new TinyFtpServer { Certificate = certificate })
+                        string diagnostics = Path.Combine(Environment.GetEnvironmentVariable("GITHUB_WORKSPACE") ?? Path.GetTempPath(), "artifacts"); Directory.CreateDirectory(diagnostics);
+                        using (var server = new TinyFtpServer { Certificate = certificate, Trace = message => File.AppendAllText(Path.Combine(diagnostics, "ftps-test.log"), DateTime.UtcNow.ToString("O") + " " + message + Environment.NewLine) })
+                        using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25)))
                         {
                             var c = server.Connection(); c.Encryption = TransferEncryption.ExplicitTls;
                             using (var ftp = new FtpTransferTransport(c, "test-password", () => new TransferOptions { UploadBytesPerSecond = 0, DownloadBytesPerSecond = 0 }))
-                            { var caps = await ftp.TestUploadAsync("/test", Guid.NewGuid().ToString("N"), CancellationToken.None); Assert.True(caps.ReadBackVerified); Assert.True(caps.RenameVerified); }
+                            { var caps = await ftp.TestUploadAsync("/test", Guid.NewGuid().ToString("N"), deadline.Token); Assert.True(caps.ReadBackVerified); Assert.True(caps.RenameVerified); }
                         }
                     }
                     finally { trust.Remove(certificate); }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ExplorerManager.Application;
 using ExplorerManager.Domain;
 using ExplorerManager.Infrastructure;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace ExplorerManager.Tests
@@ -253,6 +254,58 @@ namespace ExplorerManager.Tests
                 var first = f.Store.TransferJobs(null, null, null, 100, out more); Assert.True(more); Assert.Equal(100, first.Count);
                 var last = first.Last(); var second = f.Store.TransferJobs(null, null, last.CreatedUtc.ToString("O") + "|" + last.Id, 100, out more);
                 Assert.False(more); Assert.Equal(5, second.Count); Assert.Empty(first.Select(x => x.Id).Intersect(second.Select(x => x.Id)));
+            }
+        }
+        [Fact] public async Task QueueTotalsFollowUpdatesCompletionAndSourceGenerationAcrossRestart()
+        {
+            using (var f = new TransferTestContext())
+            {
+                var j = f.Add(); Assert.Equal(1, f.Store.TransferCounts()["WaitingForReady"]); Assert.Equal(j.Bytes, f.Store.TransferCounts()["WaitingForReadyBytes"]);
+                var file = f.Source.Files[j.Path].File; file.Length += 128;
+                f.Store.ObserveTransferFile(f.Policy, file, DateTime.UtcNow.AddSeconds(-10), false);
+                Assert.Equal(file.Length, f.Store.TransferCounts()["WaitingForReadyBytes"]);
+                file.Length -= 128; f.Store.ObserveTransferFile(f.Policy, file, DateTime.UtcNow.AddSeconds(-10), false);
+                await f.Run(); Assert.Equal(1, f.Store.TransferCounts()["Completed"]); Assert.False(f.Store.TransferCounts().ContainsKey("WaitingForReady"));
+                f.Source.Files[j.Path].Bytes[100] ^= 1; f.Store.RequestTransferRetry(j.Id, "test"); await f.Run();
+                Assert.Equal(1, f.Store.TransferCounts().Where(x => !x.Key.EndsWith("Bytes", StringComparison.Ordinal)).Sum(x => x.Value));
+                Assert.Equal(j.Bytes, f.Store.TransferCounts().Where(x => x.Key.EndsWith("Bytes", StringComparison.Ordinal)).Sum(x => x.Value));
+                var before = f.Store.TransferCounts().OrderBy(x => x.Key).ToArray();
+                f.Store.Dispose(); using (var reopened = new SqliteJournal(Path.Combine(f.DirectoryPath, "manager.db"))) Assert.Equal(before, reopened.TransferCounts().OrderBy(x => x.Key).ToArray());
+            }
+        }
+        [Fact] public void MigrationBacksUpLegacyMetadataAndRejectsNewerSchemaWithoutDowngrade()
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "explorer-migration-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, "manager.db");
+            try
+            {
+                using (var legacy = new SqliteConnection("Data Source=" + path + ";Pooling=False"))
+                {
+                    legacy.Open(); using (var cmd = legacy.CreateCommand()) { cmd.CommandText = "PRAGMA user_version=1; CREATE TABLE settings(id TEXT PRIMARY KEY,json TEXT NOT NULL); INSERT INTO settings VALUES('legacy-proof','{\"kept\":true}')"; cmd.ExecuteNonQuery(); }
+                }
+                using (var upgraded = new SqliteJournal(path)) Assert.Empty(upgraded.TransferConnections());
+                using (var backup = new SqliteConnection("Data Source=" + path + ".pre-v2.bak;Pooling=False"))
+                {
+                    backup.Open(); using (var cmd = backup.CreateCommand()) { cmd.CommandText = "PRAGMA user_version"; Assert.Equal(1L, cmd.ExecuteScalar()); cmd.CommandText = "SELECT json FROM settings WHERE id='legacy-proof'"; Assert.Equal("{\"kept\":true}", cmd.ExecuteScalar()); }
+                }
+                using (var db = new SqliteConnection("Data Source=" + path + ";Pooling=False"))
+                { db.Open(); using (var cmd = db.CreateCommand()) { cmd.CommandText = "PRAGMA user_version=3"; cmd.ExecuteNonQuery(); } }
+                Assert.Throws<InvalidOperationException>(() => new SqliteJournal(path));
+                using (var db = new SqliteConnection("Data Source=" + path + ";Pooling=False"))
+                { db.Open(); using (var cmd = db.CreateCommand()) { cmd.CommandText = "PRAGMA user_version"; Assert.Equal(3L, cmd.ExecuteScalar()); } }
+            }
+            finally { Directory.Delete(folder, true); }
+        }
+        [Fact] public void MalformedOrOversizedConfigurationIsRejectedBeforePublication()
+        {
+            using (var f = new TransferTestContext())
+            {
+                var bad = f.Store.TransferPolicy(f.Policy.Id); bad.Extensions.Add(null);
+                Assert.Throws<ArgumentException>(() => f.Store.SaveTransferPolicy(bad, "test"));
+                bad = f.Store.TransferPolicy(f.Policy.Id); bad.Exclusions = Enumerable.Range(0, 100).Select(i => bad.LocalRoot + "\\" + new string('x', 200) + i).ToList();
+                Assert.Throws<ArgumentException>(() => f.Store.SaveTransferPolicy(bad, "test")); Assert.Empty(f.Store.TransferPolicy(bad.Id).Exclusions);
+                var connection = f.Store.TransferConnection(f.Connection.Id); connection.EncodingName = null;
+                Assert.Throws<ArgumentException>(() => f.Store.SaveTransferConnection(connection, "test"));
             }
         }
         [Theory]

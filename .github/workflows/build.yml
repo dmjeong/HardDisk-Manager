@@ -52,5 +52,6 @@ jobs:
             artifacts/*.png
             artifacts/*.log
             **/TestResults/*.trx
+            **/TestResults/**/*.xml
             *smoke*.log
             *binding*.log

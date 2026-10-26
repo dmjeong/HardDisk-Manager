@@ -30,6 +30,7 @@ namespace ExplorerManager.Tests
         public volatile bool DenyRead, DenyListing, DenySize, RejectFinalReply, ConsumeOnRenameAndLoseReply, CorruptUpload, AdvertiseHash;
         public int Uploads, Appends, Renames;
         public X509Certificate2 Certificate { get; set; }
+        public Action<string> Trace { get; set; }
         private bool _disposed;
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public TinyFtpServer()
@@ -72,7 +73,9 @@ namespace ExplorerManager.Tests
                         case "AUTH":
                             if (Certificate == null) { await writer.WriteLineAsync("502 TLS unavailable").ConfigureAwait(false); break; }
                             await writer.WriteLineAsync("234 Start TLS").ConfigureAwait(false);
+                            Trace?.Invoke("Control TLS handshake");
                             var ssl = new SslStream(control, false); await ssl.AuthenticateAsServerAsync(Certificate, false, SslProtocols.Tls12, false).ConfigureAwait(false);
+                            Trace?.Invoke("Control TLS ready");
                             control = ssl; reader = Reader(control); writer = Writer(control); break;
                         case "PBSZ": await writer.WriteLineAsync("200 PBSZ=0").ConfigureAwait(false); break;
                         case "PROT": protect = arg == "P"; await writer.WriteLineAsync("200 Protection set").ConfigureAwait(false); break;
@@ -115,7 +118,8 @@ namespace ExplorerManager.Tests
                             using (var dataClient = await passive.AcceptTcpClientAsync().ConfigureAwait(false))
                             {
                                 _clients.Add(dataClient); Stream data = dataClient.GetStream();
-                                if (protect) { var dataSsl = new SslStream(data, false); await dataSsl.AuthenticateAsServerAsync(Certificate, false, SslProtocols.Tls12, false).ConfigureAwait(false); data = dataSsl; }
+                                Trace?.Invoke(command + " data connected");
+                                if (protect) { Trace?.Invoke("Data TLS handshake"); var dataSsl = new SslStream(data, false); await dataSsl.AuthenticateAsServerAsync(Certificate, false, SslProtocols.Tls12, false).ConfigureAwait(false); data = dataSsl; Trace?.Invoke("Data TLS ready"); }
                                 using (data)
                                 {
                                     if (command == "STOR" || command == "APPE")
@@ -123,7 +127,7 @@ namespace ExplorerManager.Tests
                                         using (var received = new MemoryStream())
                                         {
                                             if (command == "APPE" && Files.TryGetValue(path, out existing)) received.Write(existing, 0, existing.Length);
-                                            await data.CopyToAsync(received).ConfigureAwait(false); byte[] bytes = received.ToArray();
+                                            await data.CopyToAsync(received).ConfigureAwait(false); Trace?.Invoke(command + " data EOF"); byte[] bytes = received.ToArray();
                                             if (CorruptUpload && bytes.Length > 0) bytes[bytes.Length - 1] ^= 1;
                                             Files[path] = bytes; if (command == "STOR") Interlocked.Increment(ref Uploads); else Interlocked.Increment(ref Appends);
                                         }
@@ -139,7 +143,7 @@ namespace ExplorerManager.Tests
                                     await data.FlushAsync().ConfigureAwait(false);
                                 }
                             }
-                            passive.Stop(); passive = null;
+                            Trace?.Invoke(command + " data closed"); passive.Stop(); passive = null;
                             await writer.WriteLineAsync(RejectFinalReply && (command == "STOR" || command == "APPE") ? "426 Transfer rejected" : "226 Transfer complete").ConfigureAwait(false); break;
                         case "HASH":
                             byte[] hashData;

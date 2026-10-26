@@ -150,6 +150,7 @@ PRAGMA user_version=2;";
         public TransferPolicy SaveTransferPolicy(TransferPolicy p, string actor)
         {
             TransferRules.ValidatePolicy(p);
+            if (System.Text.Encoding.UTF8.GetByteCount(Json(p)) > 16384) throw new ArgumentException("전송 정책은 16 KiB 이내여야 합니다. 제외 경로 수와 길이를 줄이세요.");
             lock (_sync)
             {
                 var c = TransferConnection(p.ConnectionId) ?? throw new ArgumentException("Connection을 선택하세요.");

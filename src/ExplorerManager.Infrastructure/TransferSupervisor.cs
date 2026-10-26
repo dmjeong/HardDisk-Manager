@@ -167,11 +167,15 @@ namespace ExplorerManager.Infrastructure
                 var operation = new TransferOperation<object> { Id = Guid.NewGuid().ToString("N"), Kind = kind, State = "Running", Utc = DateTime.UtcNow };
                 _store.SaveTransferOperation(operation); _store.RecordEvent("TransferControlStarted", actor, operation.Id, kind);
                 _controls[operation.Id] = Task.Run(async () => {
-                    try { operation.Result = await action(operation.Id, _controlsStop.Token).ConfigureAwait(false); operation.State = "Completed"; }
+                    using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_controlsStop.Token))
+                    {
+                    timeout.CancelAfter(TimeSpan.FromSeconds(Math.Min(300, _options.MaxAttemptSeconds)));
+                    try { operation.Result = await action(operation.Id, timeout.Token).ConfigureAwait(false); operation.State = "Completed"; }
                     catch (OperationCanceledException) { operation.State = "Interrupted"; operation.Error = "서비스 종료/취소로 중단되었습니다."; }
                     catch (TransferFailure ex) { operation.State = "Failed"; operation.Error = ex.Code + ": " + ex.Message; }
                     catch (Exception ex) { operation.State = "Failed"; operation.Error = "작업에 실패했습니다. 서비스 로그와 경로/권한을 확인하세요."; _fault(ex); }
                     finally { try { _store.SaveTransferOperation(operation); } catch (Exception ex) { _fault(ex); } }
+                    }
                 });
                 return operation.Id;
             }

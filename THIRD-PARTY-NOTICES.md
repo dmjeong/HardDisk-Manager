@@ -5,6 +5,7 @@
 | 구성 요소 | 버전 | 라이선스와 소스 |
 |---|---|---|
 | Newtonsoft.Json | 13.0.4 | MIT, https://github.com/JamesNK/Newtonsoft.Json |
+| FluentFTP | 55.1.0 | MIT, https://github.com/robinrodricks/FluentFTP · Copyright (c) 2015 Robin Rodricks and FluentFTP Contributors |
 | Microsoft.Data.Sqlite | 10.0.13 | MIT, https://github.com/dotnet/efcore |
 | SQLitePCLRaw | NuGet 잠금 파일 참조 | Apache-2.0, https://github.com/ericsink/SQLitePCL.raw |
 | SQLite | SQLitePCLRaw 배포 포함 | Public domain, https://www.sqlite.org/copyright.html |
