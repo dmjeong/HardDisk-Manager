@@ -172,6 +172,9 @@ namespace ExplorerManager.Tests
         }
         [WindowsFact] public async Task ExplicitFtpsProtectsBothControlAndImageDataWithTrustedCertificate()
         {
+            string diagnostics = Path.Combine(Environment.GetEnvironmentVariable("GITHUB_WORKSPACE") ?? Path.GetTempPath(), "artifacts"); Directory.CreateDirectory(diagnostics);
+            Action<string> trace = message => File.AppendAllText(Path.Combine(diagnostics, "ftps-test.log"), DateTime.UtcNow.ToString("O") + " " + message + Environment.NewLine);
+            trace("Creating ephemeral TLS certificate");
             using (var rsa = RSA.Create())
             {
                 rsa.KeySize = 2048; var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -180,13 +183,13 @@ namespace ExplorerManager.Tests
                 request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyCertSign, true));
                 using (var signed = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1)))
                 using (var certificate = new X509Certificate2(signed.Export(X509ContentType.Pfx), "", X509KeyStorageFlags.Exportable))
-                using (var trust = new X509Store(StoreName.Root, StoreLocation.CurrentUser))
+                // Machine trust avoids Windows' interactive current-user root-install prompt in CI.
+                using (var trust = new X509Store(StoreName.Root, StoreLocation.LocalMachine))
                 {
-                    trust.Open(OpenFlags.ReadWrite); trust.Add(certificate);
+                    trace("Opening machine test trust"); trust.Open(OpenFlags.ReadWrite); trust.Add(certificate); trace("Test certificate trusted");
                     try
                     {
-                        string diagnostics = Path.Combine(Environment.GetEnvironmentVariable("GITHUB_WORKSPACE") ?? Path.GetTempPath(), "artifacts"); Directory.CreateDirectory(diagnostics);
-                        using (var server = new TinyFtpServer { Certificate = certificate, Trace = message => File.AppendAllText(Path.Combine(diagnostics, "ftps-test.log"), DateTime.UtcNow.ToString("O") + " " + message + Environment.NewLine) })
+                        using (var server = new TinyFtpServer { Certificate = certificate, Trace = trace })
                         using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25)))
                         {
                             var c = server.Connection(); c.Encryption = TransferEncryption.ExplicitTls;
@@ -194,7 +197,7 @@ namespace ExplorerManager.Tests
                             { var caps = await ftp.TestUploadAsync("/test", Guid.NewGuid().ToString("N"), deadline.Token); Assert.True(caps.ReadBackVerified); Assert.True(caps.RenameVerified); }
                         }
                     }
-                    finally { trust.Remove(certificate); }
+                    finally { trace("Removing test trust"); trust.Remove(certificate); }
                 }
             }
         }
