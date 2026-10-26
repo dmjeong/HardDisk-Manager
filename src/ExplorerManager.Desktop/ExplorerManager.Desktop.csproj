@@ -18,10 +18,12 @@
     <Compile Include="DisplayConverter.cs" />
     <Compile Include="UiPreviewClient.cs" />
     <Compile Include="UiAdapters.cs" />
+    <Compile Include="Views\TransfersView.xaml.cs"><DependentUpon>TransfersView.xaml</DependentUpon></Compile>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></ApplicationDefinition>
     <Page Include="Themes\DesignSystem.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
+    <Page Include="Views\TransfersView.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <Page Include="MainWindow.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <Page Include="LockAlertWindow.xaml"><Generator>MSBuild:Compile</Generator><SubType>Designer</SubType></Page>
     <None Include="app.manifest" />

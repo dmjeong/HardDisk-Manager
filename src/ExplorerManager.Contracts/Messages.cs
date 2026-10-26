@@ -51,6 +51,7 @@ namespace ExplorerManager.Contracts
         public List<AlertRecord> Alerts { get; set; } = new List<AlertRecord>();
         public List<InterlockStatus> Interlocks { get; set; } = new List<InterlockStatus>();
         public AppSettings OperatorSettings { get; set; }
+        public bool TransfersAvailable { get; set; }
     }
     public sealed class UnlockTicket
     {

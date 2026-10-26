@@ -10,7 +10,7 @@ using Newtonsoft.Json;
 
 namespace ExplorerManager.Infrastructure
 {
-    public sealed class SqliteJournal : IJournal, IDisposable
+    public sealed partial class SqliteJournal : IJournal, IDisposable
     {
         private readonly object _sync = new object();
         private readonly SqliteConnection _db;
@@ -23,7 +23,7 @@ namespace ExplorerManager.Infrastructure
             using (var version = _db.CreateCommand())
             {
                 version.CommandText = "PRAGMA user_version";
-                if (Convert.ToInt32(version.ExecuteScalar()) > 1) { _db.Dispose(); throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요."); }
+                if (Convert.ToInt32(version.ExecuteScalar()) > 2) { _db.Dispose(); throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요."); }
             }
             // Candidates are disposable; a crash during a scan must not prevent audit recovery.
             if (File.Exists(path + ".scan")) File.Delete(path + ".scan");
@@ -53,9 +53,10 @@ CREATE TABLE IF NOT EXISTS protection (path TEXT PRIMARY KEY, fileid TEXT NOT NU
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, utc TEXT NOT NULL, action TEXT NOT NULL, actor TEXT, entity TEXT, detail TEXT);
 CREATE TABLE IF NOT EXISTS requests (sid TEXT NOT NULL, id TEXT NOT NULL, fingerprint TEXT NOT NULL, json TEXT, utc TEXT NOT NULL, PRIMARY KEY(sid,id));
 CREATE TABLE IF NOT EXISTS metrics (bucket TEXT NOT NULL, entity TEXT NOT NULL, name TEXT NOT NULL, unit TEXT, sum REAL, min REAL, max REAL, count INTEGER NOT NULL, PRIMARY KEY(bucket,entity,name));
-PRAGMA user_version=1;";
+";
                 cmd.ExecuteNonQuery();
             }
+            InitializeTransfers();
         }
         private static string Json(object o) => JsonConvert.SerializeObject(o, Protocol.Json);
         private static T Parse<T>(string s) => JsonConvert.DeserializeObject<T>(s, Protocol.Json);

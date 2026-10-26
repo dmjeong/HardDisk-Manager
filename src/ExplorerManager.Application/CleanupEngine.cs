@@ -18,8 +18,11 @@ namespace ExplorerManager.Application
         private readonly IClock _clock;
         private readonly IExecutionGate _gate;
         private readonly ILockInspector _locks;
-        public CleanupEngine(IVolumeCatalog volumes, IFileSystem files, IJournal journal, IRecoveryCache cache, IClock clock, IExecutionGate gate, ILockInspector locks)
-        { _volumes = volumes; _files = files; _journal = journal; _cache = cache; _clock = clock; _gate = gate; _locks = locks; }
+        private readonly IFileDeletionGate _deletionGate;
+        private readonly IFileWorkCoordinator _work;
+        public CleanupEngine(IVolumeCatalog volumes, IFileSystem files, IJournal journal, IRecoveryCache cache, IClock clock, IExecutionGate gate, ILockInspector locks,
+            IFileDeletionGate deletionGate = null, IFileWorkCoordinator work = null)
+        { _volumes = volumes; _files = files; _journal = journal; _cache = cache; _clock = clock; _gate = gate; _locks = locks; _deletionGate = deletionGate ?? journal as IFileDeletionGate; _work = work; }
 
         public async Task<RunRecord> RunAsync(DrivePolicy policy, bool preview, string actor, CancellationToken cancellation, string onlyPath = null)
         {
@@ -79,19 +82,22 @@ namespace ExplorerManager.Application
                     var item = new ItemRecord { RunId = run.Id, PolicyId = policy.Id, Utc = _clock.UtcNow, File = expected, Actor = actor, State = "Candidate" };
                     if (!PolicyRules.IsExpired(expected, policy, run.CutoffUtc) || _journal.IsProtected(expected, _clock.UtcNow))
                     { Skip(item, run, "보관 기간 또는 복구 보호 대상"); continue; }
+                    var preflight = _deletionGate?.CheckDeletion(expected);
+                    if (preflight != null && !preflight.Allowed) { Skip(item, run, preflight.Reason); continue; }
                     if (!_cache.CanFit(expected)) { Skip(item, run, "CacheTooSmall"); continue; }
                     if (expected.Length > policy.MaxDeleteBytes - requestedDeleteBytes) { Skip(item, run, "BatchByteLimit"); continue; }
                     RecoveryInfo cached = null;
                     bool requested = false;
                     try
                     {
+                        using (var lane = _work == null ? null : await _work.AcquireAsync(policy.VolumeId, cancellation).ConfigureAwait(false))
                         using (var file = _files.OpenVerified(expected, policy))
                         {
                             item.File = file.Snapshot; run.CurrentPath = item.Path;
-                            if (preview) { item.State = "WouldDelete"; _journal.RecordItem(item); continue; }
-                            cached = await _cache.CaptureAsync(file.Snapshot, file.Content, item.Id, run.Id, policy.Id, policy.ReadBytesPerSecond, cancellation).ConfigureAwait(false);
+                            if (preview) { item.State = preflight?.EvidenceIds.Count > 0 ? "EligiblePendingFinalVerification" : "WouldDelete"; _journal.RecordItem(item); continue; }
+                            Stream captureInput = _work == null ? file.Content : new TransferReadStream(file.Content, (n, ct) => _work.LimitReadAsync(policy.VolumeId, n, ct), cancellation);
+                            cached = await _cache.CaptureAsync(file.Snapshot, captureInput, item.Id, run.Id, policy.Id, policy.ReadBytesPerSecond, cancellation).ConfigureAwait(false);
                             item.CacheId = cached.Id; item.RecoveryState = "CacheReady"; item.State = "DeleteIntent";
-                            _journal.RecordItem(item);
                             cancellation.ThrowIfCancellationRequested();
                             var immediatelyBefore = _volumes.Get(policy.VolumeId);
                             string stopReason = Math.Abs((_clock.UtcNow - run.StartedUtc).TotalSeconds - elapsed.Elapsed.TotalSeconds) > 30 ? "ClockChanged" :
@@ -105,10 +111,20 @@ namespace ExplorerManager.Application
                                 _cache.Remove(cached.Id, "Cancelled"); cached = null;
                                 Skip(item, run, "조건 변경: " + stopReason); run.State = stopReason; break;
                             }
-                            item.FreeBefore = immediatelyBefore.FreeBytes;
-                            requested = true;
-                            requestedDeleteBytes += item.Bytes;
-                            file.MarkForDeletion();
+                            using (var permit = _deletionGate?.AcquireCommitPermit())
+                            {
+                                var decision = _deletionGate?.CheckDeletion(file.Snapshot, cached.Hash);
+                                if (decision != null && !decision.Allowed)
+                                { _cache.Remove(cached.Id, decision.Reason); cached = null; Skip(item, run, decision.Reason); continue; }
+                                item.TransferEvidenceIds = decision?.EvidenceIds ?? new System.Collections.Generic.List<string>();
+                                item.VerifiedSourceHash = cached.Hash;
+                                item.FreeBefore = immediatelyBefore.FreeBytes;
+                                _journal.RecordItem(item);
+                                requested = true;
+                                requestedDeleteBytes += item.Bytes;
+                                file.MarkForDeletion();
+                                file.Dispose(); // Policy/guard publication cannot race deletion handle close.
+                            }
                         }
                         bool absent = _files.IsAbsent(item.File);
                         _cache.Commit(cached.Id, absent);

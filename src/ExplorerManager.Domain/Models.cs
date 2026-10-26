@@ -112,6 +112,8 @@ namespace ExplorerManager.Domain
         public string CacheId { get; set; }
         public string Actor { get; set; }
         public long? FreeBefore { get; set; }
+        public List<string> TransferEvidenceIds { get; set; } = new List<string>();
+        public string VerifiedSourceHash { get; set; }
         public long? FreeAfter { get; set; }
         public long? ObservedFreeDelta => FreeAfter - FreeBefore;
         public string Path => File?.Path;

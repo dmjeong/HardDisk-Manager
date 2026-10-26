@@ -22,6 +22,8 @@ namespace ExplorerManager.Desktop
         private readonly RecoveryInfo[] _recovery;
         private readonly FolderSummary[] _folders;
         private readonly AppSettings _settings;
+        private readonly TransferOverview _transferOverview;
+        private readonly TransferJobPage _transferJobs;
 
         private UiPreviewClient()
         {
@@ -115,6 +117,24 @@ namespace ExplorerManager.Desktop
                 new InterlockStatus { Code = "CpuLoad", Entity = "CPU", State = "Clear", Blocking = false, Latched = false,
                     SinceUtc = _now.AddMinutes(-4), Detail = "[예시] CPU 사용률이 90% 미만입니다." }
             };
+            _dashboard.TransfersAvailable = true;
+            var connection = new TransferConnection { Id = "11111111111111111111111111111111", Version = 1, Name = "Inspection server", Host = "10.20.30.40", UserName = "camera01", HasSecret = true,
+                Capabilities = new TransferCapabilities { Connected = true, CheckedUtc = _now, ReadBackVerified = true, RenameVerified = true, UploadResumeVerified = true,
+                    Detail = "[예시] STOR · RETR SHA-256 · verified resume · rename" } };
+            var transferPolicy = new TransferPolicy { Id = "22222222222222222222222222222222", Version = 1, Name = "Camera 01 images", ConnectionId = connection.Id, VolumeId = MediaVolume,
+                LocalRoot = @"D:\Inspection\Camera01", RemoteRoot = "/incoming/camera01", StagingRoot = "/staging/camera01", Enabled = true, ProtectionRegistered = true,
+                PublishCompatibilityConfirmed = true, ExclusiveDestinationConfirmed = true, LastCompleteScanUtc = _now.AddMinutes(-2) };
+            _transferOverview = new TransferOverview { Available = true, Connections = new List<TransferConnection> { connection }, Policies = new List<TransferPolicy> { transferPolicy },
+                Counts = new Dictionary<string, long> { { "Ready", 1250 }, { "ReadyBytes", 4800000000 }, { "Completed", 8921 }, { "CompletedBytes", 35000000000 }, { "NeedsAttention", 2 }, { "PublicationUnknown", 1 } },
+                Active = new List<TransferProgress> { new TransferProgress { JobId = "ui-transfer-1", Stage = "UploadingTemp", Total = 24000000, Sent = 15360000, BytesPerSecond = 8200000 },
+                    new TransferProgress { JobId = "ui-transfer-2", Stage = "VerifyingRemote", Total = 18000000, Verified = 12600000, Sent = 18000000 } } };
+            _transferJobs = new TransferJobPage { Items = new List<TransferJobRow> {
+                new TransferJobRow { Id = "ui-transfer-1", PolicyName = transferPolicy.Name, ConnectionName = connection.Name, Path = @"D:\Inspection\Camera01\LOT-A\IMG_00241.png", RemoteFinal = "/incoming/camera01/LOT-A/IMG_00241.png", Bytes = 24000000, State = "UploadingTemp", Progress = 64, CreatedUtc = _now.AddSeconds(-4), Attempts = 1, Detail = "[예시] 임시 경로로 스트리밍 중" },
+                new TransferJobRow { Id = "ui-transfer-2", PolicyName = transferPolicy.Name, ConnectionName = connection.Name, Path = @"D:\Inspection\Camera01\LOT-A\IMG_00240.tif", RemoteFinal = "/incoming/camera01/LOT-A/IMG_00240.tif", Bytes = 18000000, State = "VerifyingRemote", Progress = 70, CreatedUtc = _now.AddSeconds(-8), Attempts = 1, Detail = "[예시] RETR SHA-256 검증 중" },
+                new TransferJobRow { Id = "ui-transfer-3", PolicyName = transferPolicy.Name, ConnectionName = connection.Name, Path = @"D:\Inspection\Camera01\LOT-A\IMG_00239.jpg", RemoteFinal = "/incoming/camera01/LOT-A/IMG_00239.jpg", Bytes = 5400000, State = "Completed", Progress = 100, EvidenceLevel = TransferEvidenceLevel.PublishedVerified, CreatedUtc = _now.AddSeconds(-12), Attempts = 1, Detail = "[예시] read-back 검증과 최종 게시 확인" },
+                new TransferJobRow { Id = "ui-transfer-4", PolicyName = transferPolicy.Name, ConnectionName = connection.Name, Path = @"D:\Inspection\Camera01\LOT-A\IMG_00238.jpg", RemoteFinal = "/incoming/camera01/LOT-A/IMG_00238.jpg", Bytes = 5800000, State = "PublicationUnknown", CreatedUtc = _now.AddMinutes(-3), Attempts = 2, ErrorCode = "PublicationUnknown", Detail = "[예시] 최종 응답 유실 · 원격 조회 필요 · 자동 재게시/삭제 보류" },
+                new TransferJobRow { Id = "ui-transfer-5", PolicyName = transferPolicy.Name, ConnectionName = connection.Name, Path = @"D:\Inspection\Camera01\LOT-A\IMG_00237.png", RemoteFinal = "/incoming/camera01/LOT-A/IMG_00237.png", Bytes = 7200000, State = "WaitingForReady", CreatedUtc = _now.AddSeconds(-2), Detail = "[예시] 저장 완료와 안정화 대기" }
+            } };
         }
 
         public static async Task<MainViewModel> CreateAsync(IUiServices ui)
@@ -143,6 +163,8 @@ namespace ExplorerManager.Desktop
                 case "History": value = _history; break;
                 case "Folders": value = _folders; break;
                 case "Settings": value = _settings; break;
+                case "TransferOverview": value = _transferOverview; break;
+                case "TransferJobs": value = _transferJobs; break;
                 default: throw Blocked("삭제·복구·정책 저장·서비스 제어를 실행할 수 없습니다.");
             }
             return Task.FromResult((T)value);

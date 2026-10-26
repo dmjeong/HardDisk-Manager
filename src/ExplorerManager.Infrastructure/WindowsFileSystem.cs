@@ -130,6 +130,7 @@ namespace ExplorerManager.Infrastructure
                         foreach (string raw in children)
                         {
                             cancellation.ThrowIfCancellationRequested();
+                            if (watch.Elapsed.TotalSeconds >= p.MaxScanSeconds) throw new TimeoutException("전체 경로 스캔 제한 시간을 초과했습니다. 부분 목록은 삭제하지 않습니다.");
                             string path = PathGuard.Normalize(raw);
                             if (PathGuard.Excluded(path, p)) { skipped++; continue; }
                             FileSnapshot f;
@@ -182,7 +183,7 @@ namespace ExplorerManager.Infrastructure
             using (var guards = new DirectoryGuards(Path.GetDirectoryName(file.Path)))
                 return Snapshot(file.Path, file.Root, policy, false);
         }
-        private static FileSnapshot ReadSnapshot(SafeFileHandle h, string path, string root, DrivePolicy policy, bool withDacl)
+        internal static FileSnapshot ReadSnapshot(SafeFileHandle h, string path, string root, DrivePolicy policy, bool withDacl)
         {
             NativeMethods.FileInfo info; NativeMethods.Check(NativeMethods.GetFileInformationByHandle(h, out info));
             var f = new FileSnapshot { Path = path, Root = root, ParentPath = Path.GetDirectoryName(path), VolumeId = policy.VolumeId,
@@ -250,7 +251,7 @@ namespace ExplorerManager.Infrastructure
             }
             finally { Marshal.FreeHGlobal(buffer); }
         }
-        private static void EnsureNoAlternateStreams(SafeFileHandle h)
+        internal static void EnsureNoAlternateStreams(SafeFileHandle h)
         {
             IntPtr buffer = Marshal.AllocHGlobal(65536);
             try

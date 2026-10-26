@@ -15,7 +15,7 @@ using Newtonsoft.Json.Linq;
 
 namespace ExplorerManager.Infrastructure
 {
-    public sealed class ServiceRuntime : IExecutionGate, IDisposable
+    public sealed partial class ServiceRuntime : IExecutionGate, IDisposable
     {
         private readonly SqliteJournal _store;
         private readonly WindowsVolumeCatalog _volumes = new WindowsVolumeCatalog();
@@ -53,7 +53,8 @@ namespace ExplorerManager.Infrastructure
                 _cache = new RecoveryCache(_store.Settings().CacheBytes, _store.SetRecoveryState);
                 _files = new WindowsFileSystem(_volumes);
                 _monitor = new Monitoring(_store, LogError);
-                _engine = new CleanupEngine(_volumes, _files, _store, _cache, new SystemClock(), this, _locks);
+                InitializeTransferRuntime();
+                _engine = new CleanupEngine(_volumes, _files, _store, _cache, new SystemClock(), this, _locks, _store, _diskWork);
             }
             catch { _instance.Dispose(); throw; }
         }
@@ -65,7 +66,8 @@ namespace ExplorerManager.Infrastructure
                 Guard(() => new PipeServer(Execute, LogError).RunAsync(_stop.Token), "IPC"),
                 Guard(() => _monitor.RunAsync(_stop.Token), "Monitoring"),
                 Guard(ScheduleAsync, "Scheduler"),
-                Guard(WatchInterlocksAsync, "Interlocks")
+                Guard(WatchInterlocksAsync, "Interlocks"),
+                Guard(() => _transfers.RunAsync(_stop.Token), "Transfers")
             };
             _store.RecordEvent("ServiceStarted", "Service", _cache.Epoch, "v1.0.0");
         }
@@ -243,7 +245,7 @@ namespace ExplorerManager.Infrastructure
             // Serializes command authorization/version checks and durable idempotency receipts.
             lock (_commands)
             {
-                bool query = new[] { "Dashboard", "History", "Folders", "Recovery", "Settings" }.Contains(request.Command);
+                bool query = new[] { "Dashboard", "History", "Folders", "Recovery", "Settings", "TransferOverview", "TransferJobs", "TransferDetail", "TransferOperation" }.Contains(request.Command);
                 if (!caller.Operator) throw new UnauthorizedAccessException("관리자 권한으로 Explorer Manager를 실행하세요.");
                 string fingerprint;
                 using (var sha = SHA256.Create()) fingerprint = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(request.Command + request.Data.ToString(Formatting.None))));
@@ -269,7 +271,7 @@ namespace ExplorerManager.Infrastructure
                     return new Dashboard { Utc = DateTime.UtcNow, IsOperator = caller.Operator, Paused = _paused, Health = _health,
                         CacheEpoch = _cache.Epoch, CacheCapacity = _cache.Capacity, CacheUsed = _cache.Used, Volumes = _volumes.List().ToList(),
                         Policies = _store.Policies(), Metrics = _monitor.Snapshot().ToList(), Runs = _store.Runs(), Alerts = _store.Alerts(),
-                        Interlocks = Interlocks(), OperatorSettings = _store.Settings() };
+                        Interlocks = Interlocks(), OperatorSettings = _store.Settings(), TransfersAvailable = true };
                 case "SavePolicy":
                     var p = d.ToObject<DrivePolicy>(); PathGuard.ValidatePolicy(p, _volumes);
                     foreach (var other in _store.Policies().Where(x => x.Id != p.Id))
@@ -369,7 +371,7 @@ namespace ExplorerManager.Infrastructure
                     _store.RecordEvent((bool?)d["Force"] == true ? "ForceCloseResult" : "NormalCloseResult", caller.Sid, completed.Id, (string)d["Result"]);
                     if ((bool?)d["Retry"] == true) return StartCleanup(completed.PolicyId, false, caller.Sid, completed.File.Path);
                     return true;
-                default: throw new ArgumentException("지원하지 않는 명령입니다.");
+                default: return DispatchTransfer(r, caller);
             }
         }
         private UnlockTicket PrepareUnlock(string alertId, Caller caller)
@@ -456,12 +458,12 @@ namespace ExplorerManager.Infrastructure
         }
         public async Task StopAsync()
         {
-            _stop.Cancel(); lock (_sync) _active?.Cancel(); _monitor.Dispose();
-            try { await Task.WhenAll(_background.Concat(new[] { _operation })).ConfigureAwait(false); } catch (OperationCanceledException) { }
+            _stop.Cancel(); lock (_sync) _active?.Cancel(); _monitor.Dispose(); _transfers.StopControls(); _transfers.CancelActive();
+            try { await Task.WhenAll(_background.Concat(new[] { _operation }).Concat(_transfers.ControlTasks)).ConfigureAwait(false); } catch (OperationCanceledException) { }
         }
         public void Dispose()
         {
-            try { _monitor.Dispose(); _cache.Dispose(); _store.Dispose(); _stop.Dispose(); }
+            try { if (_started) StopAsync().GetAwaiter().GetResult(); _transfers.Dispose(); _monitor.Dispose(); _cache.Dispose(); _store.Dispose(); _stop.Dispose(); }
             finally { _instance.Dispose(); }
         }
     }

@@ -112,6 +112,8 @@ namespace ExplorerManager.Desktop
                 for (int index = 0; index < root.Items.Count; index++)
                 {
                     root.SelectedIndex = index;
+                    var model = window.DataContext as MainViewModel;
+                    if (index == 7 && model != null) { model.Transfers.IsActive = true; await model.Transfers.RefreshAsync(true); }
                     await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
                     host.Measure(new Size(width, height)); host.Arrange(new Rect(0, 0, width, height)); host.UpdateLayout();
                     if (Math.Abs(root.ActualWidth - width) > 1 || Math.Abs(root.ActualHeight - height) > 1)
@@ -119,6 +121,18 @@ namespace ExplorerManager.Desktop
                     string path = index == 0 ? screenshot : Path.Combine(Path.GetDirectoryName(screenshot),
                         Path.GetFileNameWithoutExtension(screenshot) + "-" + index + ".png");
                     Capture(host, path);
+                    if (index == 7 && model != null)
+                    {
+                        foreach (int panel in new[] { 1, 2, 3 })
+                        {
+                            model.Transfers.SelectedPanel = panel;
+                            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                            host.Measure(new Size(width, height)); host.Arrange(new Rect(0, 0, width, height)); host.UpdateLayout();
+                            string suffix = panel == 1 ? "policies" : panel == 2 ? "connections" : "options";
+                            Capture(host, Path.Combine(Path.GetDirectoryName(screenshot), Path.GetFileNameWithoutExtension(screenshot) + "-transfers-" + suffix + ".png"));
+                        }
+                        model.Transfers.SelectedPanel = 0;
+                    }
                 }
             }
             finally

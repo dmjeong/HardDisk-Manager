@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Models.cs" />
+    <Compile Include="TransferModels.cs" />
     <Compile Include="PolicyRules.cs" />
     <Compile Include="ResourceInterlocks.cs" />
   </ItemGroup>

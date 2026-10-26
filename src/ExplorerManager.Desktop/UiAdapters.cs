@@ -13,7 +13,7 @@ using Forms = System.Windows.Forms;
 
 namespace ExplorerManager.Desktop
 {
-    internal sealed class UiAdapters : IUiServices
+    internal sealed class UiAdapters : IUiServices, ITransferUiServices
     {
         private readonly Window _owner;
         private readonly Action<string, string> _notify;
@@ -27,6 +27,23 @@ namespace ExplorerManager.Desktop
             return false;
         }
         public Task<bool> ConfirmAsync(string title, string text) => Task.FromResult(MessageBox.Show(_owner, text, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes);
+        public Task<string> RequestTransferPasswordAsync()
+        {
+            var password = new PasswordBox { Margin = new Thickness(0, 16, 0, 20), Padding = new Thickness(10),
+                Background = (Brush)_owner.FindResource("InputBrush"), Foreground = (Brush)_owner.FindResource("TextBrush"),
+                BorderBrush = (Brush)_owner.FindResource("BorderBrush"), MaxLength = 4096 };
+            var dialog = new Window { Title = "FTP credential", Owner = _owner, Width = 440, SizeToContent = SizeToContent.Height,
+                ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            var body = new StackPanel { Margin = new Thickness(24) };
+            body.Children.Add(new TextBlock { Text = "FTP password", FontSize = 17, FontWeight = FontWeights.SemiBold });
+            body.Children.Add(new TextBlock { Text = "서비스의 보호된 저장소에 등록합니다.", Margin = new Thickness(0, 8, 0, 0) }); body.Children.Add(password);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var cancel = new Button { Content = "Cancel", IsCancel = true, Margin = new Thickness(0, 0, 8, 0) };
+            var save = new Button { Content = "Set password", IsDefault = true, Style = (Style)_owner.FindResource("PrimaryButton") };
+            save.Click += (sender, args) => dialog.DialogResult = true; buttons.Children.Add(cancel); buttons.Children.Add(save); body.Children.Add(buttons); dialog.Content = body;
+            dialog.Loaded += (sender, args) => password.Focus(); bool accepted = dialog.ShowDialog() == true;
+            string value = accepted ? password.Password : null; password.Clear(); return Task.FromResult(value);
+        }
         public Task<int> ShowLockAlertAsync(AlertRecord alert)
         {
             var model = new LockAlertViewModel(alert);

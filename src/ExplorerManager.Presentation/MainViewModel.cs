@@ -36,6 +36,7 @@ namespace ExplorerManager.Presentation
         public MainViewModel(IExplorerClient client, IUiServices ui)
         {
             _client = client; _ui = ui;
+            Transfers = new TransferViewModel(client, ui, Volumes);
             Volumes.CollectionChanged += (sender, args) => { Changed(nameof(VolumeCountText)); Changed(nameof(TotalFreeText)); };
             Alerts.CollectionChanged += (sender, args) => Changed(nameof(AlertCountText));
             Interlocks.CollectionChanged += (sender, args) => NotifyInterlocks();
@@ -100,6 +101,9 @@ namespace ExplorerManager.Presentation
             ElevateCommand = Command(() => { _ui.RunElevated(); return Task.CompletedTask; });
         }
         private AsyncCommand Command(Func<Task> action) => new AsyncCommand(action, Error);
+        public TransferViewModel Transfers { get; }
+        private int _selectedSection;
+        public int SelectedSection { get => _selectedSection; set { if (Set(ref _selectedSection, value)) Transfers.IsActive = value == 7; } }
         private void Error(Exception ex) { Message = ex.Message; _ui.Notify("Explorer Manager", ex.Message); }
         public ObservableCollection<VolumeRow> Volumes { get; } = new ObservableCollection<VolumeRow>();
         public ObservableCollection<PolicyEditor> Policies { get; } = new ObservableCollection<PolicyEditor>();
@@ -267,6 +271,7 @@ namespace ExplorerManager.Presentation
                 CacheText = (state.CacheUsed / 1048576.0).ToString("F1") + " MiB / " + (state.CacheCapacity / 1073741824.0).ToString("F2") + " GiB";
                 string alertId = SelectedAlert?.Id, recoveryId = SelectedRecovery?.Id, recoveryFolder = RecoveryFolder;
                 SyncVolumes(state); Replace(Runs, state.Runs); Replace(Metrics, state.Metrics); Replace(Alerts, state.Alerts);
+                await Transfers.RefreshAsync(state.TransfersAvailable);
                 Replace(Interlocks, state.Interlocks ?? new System.Collections.Generic.List<InterlockStatus>());
                 SelectedAlert = Alerts.FirstOrDefault(x => x.Id == alertId);
                 if (discardPolicyChanges || SelectedPolicy == null || !SelectedPolicy.IsDirty)

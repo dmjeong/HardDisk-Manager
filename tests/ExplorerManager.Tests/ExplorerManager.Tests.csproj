@@ -22,6 +22,8 @@
     <Compile Include="PresentationTests.cs" />
     <Compile Include="WindowsSafetyTests.cs" />
     <Compile Include="WindowsTests.cs" />
+    <Compile Include="TransferTests.cs" />
+    <Compile Include="FtpTransferTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

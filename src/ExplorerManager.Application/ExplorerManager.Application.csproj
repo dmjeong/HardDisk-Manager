@@ -11,6 +11,9 @@
   <ItemGroup>
     <Compile Include="CleanupEngine.cs" />
     <Compile Include="Ports.cs" />
+    <Compile Include="TransferPorts.cs" />
+    <Compile Include="TransferIO.cs" />
+    <Compile Include="TransferCoordinator.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
