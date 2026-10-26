@@ -99,6 +99,8 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 
 - [개발 계획](docs/01-plan/features/explorer-manager.plan.md)
 - [기술 설계](docs/02-design/features/explorer-manager.design.md)
+- [이미지 전송 개발 계획 — 구현 예정](docs/01-plan/features/image-transfer.plan.md)
+- [기존 FTP/TCP 서버 연동 상세 설계 — 구현 예정](docs/02-design/features/image-transfer.design.md)
 - [운영 매뉴얼](docs/operations.md)
 - [구현·검증 현황](docs/implementation-status.md)
 - [제3자 라이선스](THIRD-PARTY-NOTICES.md)
