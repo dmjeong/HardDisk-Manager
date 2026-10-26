@@ -18,12 +18,19 @@ namespace ExplorerManager.Infrastructure
         public SqliteJournal(string path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
+            bool existing = File.Exists(path) && new FileInfo(path).Length > 0;
             _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+            try
+            {
             _db.Open();
             using (var version = _db.CreateCommand())
             {
                 version.CommandText = "PRAGMA user_version";
-                if (Convert.ToInt32(version.ExecuteScalar()) > 2) { _db.Dispose(); throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요."); }
+                int schema = Convert.ToInt32(version.ExecuteScalar());
+                if (schema > 2) throw new InvalidOperationException("새로운 DB 스키마입니다. 호환 버전으로 실행하세요.");
+                if (existing && schema < 2)
+                    using (var backup = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path + ".pre-v2.bak", Pooling = false }.ToString()))
+                    { backup.Open(); _db.BackupDatabase(backup); }
             }
             // Candidates are disposable; a crash during a scan must not prevent audit recovery.
             if (File.Exists(path + ".scan")) File.Delete(path + ".scan");
@@ -57,6 +64,8 @@ CREATE TABLE IF NOT EXISTS metrics (bucket TEXT NOT NULL, entity TEXT NOT NULL, 
                 cmd.ExecuteNonQuery();
             }
             InitializeTransfers();
+            }
+            catch { _scan?.Dispose(); _db.Dispose(); throw; }
         }
         private static string Json(object o) => JsonConvert.SerializeObject(o, Protocol.Json);
         private static T Parse<T>(string s) => JsonConvert.DeserializeObject<T>(s, Protocol.Json);
@@ -262,6 +271,7 @@ ON CONFLICT(bucket,entity,name) DO UPDATE SET sum=sum+excluded.sum,min=min(min,e
             lock (_sync)
             {
                 string cutoff = DateTime.UtcNow.AddDays(-settings.HistoryDays).ToString("O");
+                MaintainTransfers(cutoff);
                 Exec("DELETE FROM items WHERE utc<$0 AND recovery NOT IN ('Recoverable','OutcomeUnknown','CacheReady') AND state NOT IN ('DeleteIntent','DeleteRequested')", cutoff);
                 Exec("DELETE FROM runs WHERE utc<$0 AND id NOT IN (SELECT runid FROM items)", cutoff);
                 Exec("DELETE FROM alerts WHERE utc<$0 AND ack=1", cutoff);

@@ -24,6 +24,7 @@
     <Compile Include="WindowsTests.cs" />
     <Compile Include="TransferTests.cs" />
     <Compile Include="FtpTransferTests.cs" />
+    <Compile Include="TransferWindowsTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

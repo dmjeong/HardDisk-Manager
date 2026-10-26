@@ -17,7 +17,7 @@ namespace ExplorerManager.Presentation
         public static V Clone<V>(V value) => JsonConvert.DeserializeObject<V>(JsonConvert.SerializeObject(value));
         public T Snapshot() => Clone(Model);
         protected void Clean(T model) { Model = Clone(model); IsDirty = false; Changed(""); }
-        protected static int Range(int n, int min, int max) { if (n < min || n > max) throw new ArgumentOutOfRangeException(nameof(n), min + "–" + max + " 범위를 입력하세요."); return n; }
+        protected int Range(int n, int min, int max) { if (n < min || n > max) { IsDirty = true; EditVersion++; Changed(nameof(IsDirty)); Changed("DisplayName"); throw new ArgumentOutOfRangeException(nameof(n), min + "–" + max + " 범위를 입력하세요."); } return n; }
     }
     public sealed class TransferConnectionEditor : TransferEditor<TransferConnection>
     {
@@ -41,12 +41,18 @@ namespace ExplorerManager.Presentation
             (Model.Capabilities.Connected ? "Connected" : "Disconnected") + " · SHA-256 " + (Model.Capabilities.ServerSha256 ? "supported" : "read-back required") +
             " · Resume " + (Model.Capabilities.UploadResumeVerified ? "tested" : "not tested") + " · Rename " + (Model.Capabilities.RenameVerified ? "tested" : "not tested") +
             Environment.NewLine + Model.Capabilities.Detail;
-        public void Refresh(TransferConnection c) { if (!IsDirty) Clean(c); else { Model.HasSecret = c.HasSecret; Model.Capabilities = c.Capabilities; Changed(nameof(SecretStatus)); Changed(nameof(Capabilities)); } }
+        public void Refresh(TransferConnection c) {
+            if (c.Version < Model.Version) return;
+            if (!IsDirty) Clean(c);
+            else { Model.HasSecret |= c.HasSecret; if (c.Capabilities != null && (Model.Capabilities == null || c.Capabilities.CheckedUtc >= Model.Capabilities.CheckedUtc)) Model.Capabilities = c.Capabilities; Changed(nameof(SecretStatus)); Changed(nameof(Capabilities)); }
+        }
         public void Accept(TransferConnection saved, long editVersion)
         { if (EditVersion == editVersion) Clean(saved); else { Model.Version = saved.Version; Model.HasSecret = saved.HasSecret; Model.Capabilities = saved.Capabilities; Changed(nameof(Version)); Changed(nameof(SecretStatus)); } }
+        public void Reload(TransferConnection saved) => Clean(saved);
     }
     public sealed class TransferPolicyEditor : TransferEditor<TransferPolicy>
     {
+        private string _startTime, _endTime;
         public TransferPolicyEditor(TransferPolicy p) : base(p) { }
         public string Id => Model.Id;
         public int Version => Model.Version;
@@ -77,8 +83,8 @@ namespace ExplorerManager.Presentation
         public int ContentAuditHours { get => Model.ContentAuditHours; set { Range(value, 0, 8760); if (ContentAuditHours != value) Edit(() => Model.ContentAuditHours = value); } }
         public int Priority { get => Model.Priority; set { Range(value, 1, 5); if (Priority != value) Edit(() => Model.Priority = value); } }
         public int MaxFileMiB { get => (int)(Model.MaxFileBytes / 1048576); set { Range(value, 1, 16384); if (MaxFileMiB != value) Edit(() => Model.MaxFileBytes = value * 1048576L); } }
-        public string StartTime { get => Model.StartHour.ToString("00") + ":" + Model.StartMinute.ToString("00"); set { int hour, minute; ParseTime(value, false, out hour, out minute); if (StartTime != value) Edit(() => { Model.StartHour = hour; Model.StartMinute = minute; }); } }
-        public string EndTime { get => Model.EndHour.ToString("00") + ":" + Model.EndMinute.ToString("00"); set { int hour, minute; ParseTime(value, true, out hour, out minute); if (EndTime != value) Edit(() => { Model.EndHour = hour; Model.EndMinute = minute; }); } }
+        public string StartTime { get => _startTime ?? Model.StartHour.ToString("00") + ":" + Model.StartMinute.ToString("00"); set { if (StartTime == value) return; Edit(() => _startTime = value); int hour, minute; ParseTime(value, false, out hour, out minute); Model.StartHour = hour; Model.StartMinute = minute; } }
+        public string EndTime { get => _endTime ?? Model.EndHour.ToString("00") + ":" + Model.EndMinute.ToString("00"); set { if (EndTime == value) return; Edit(() => _endTime = value); int hour, minute; ParseTime(value, true, out hour, out minute); Model.EndHour = hour; Model.EndMinute = minute; } }
         private static void ParseTime(string text, bool end, out int hour, out int minute)
         {
             hour = minute = 0; var parts = (text ?? "").Split(':');
@@ -95,8 +101,10 @@ namespace ExplorerManager.Presentation
         public bool Saturday { get => Day(ScheduleDays.Saturday); set => Day(ScheduleDays.Saturday, value); }
         public bool Sunday { get => Day(ScheduleDays.Sunday); set => Day(ScheduleDays.Sunday, value); }
         public string ProtectionText => Model.ProtectionRegistered ? "삭제 보호 등록됨 · Pause/Archive 후에도 보호 유지" : "활성화 시 선택한 삭제 연동 규칙 적용";
-        public void Refresh(TransferPolicy p) { if (!IsDirty) Clean(p); }
+        public new TransferPolicy Snapshot() { int h, m; ParseTime(StartTime, false, out h, out m); ParseTime(EndTime, true, out h, out m); return base.Snapshot(); }
+        public void Refresh(TransferPolicy p) { if (!IsDirty && p.Version >= Model.Version) { _startTime = _endTime = null; Clean(p); } }
         public void Accept(TransferPolicy saved, long editVersion)
-        { if (EditVersion == editVersion) Clean(saved); else { Model.Version = saved.Version; Model.ProtectionRegistered = saved.ProtectionRegistered; Changed(nameof(Version)); Changed(nameof(ProtectionText)); } }
+        { if (EditVersion == editVersion) { _startTime = _endTime = null; Clean(saved); } else { Model.Version = saved.Version; Model.ProtectionRegistered = saved.ProtectionRegistered; Changed(nameof(Version)); Changed(nameof(ProtectionText)); } }
+        public void Reload(TransferPolicy saved) { _startTime = _endTime = null; Clean(saved); }
     }
 }

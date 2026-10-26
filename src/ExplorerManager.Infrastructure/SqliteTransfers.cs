@@ -14,6 +14,8 @@ namespace ExplorerManager.Infrastructure
         private List<StoredTransferGuard> _transferGuardCache;
         private void InitializeTransfers()
         {
+            bool hadTotals;
+            using (var probe = _db.CreateCommand()) { probe.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='transfer_totals'"; hadTotals = Convert.ToInt32(probe.ExecuteScalar()) > 0; }
             using (var tx = _db.BeginTransaction())
             using (var c = _db.CreateCommand())
             {
@@ -28,6 +30,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS transfer_source_current ON transfer_jobs(polic
 CREATE UNIQUE INDEX IF NOT EXISTS transfer_job_identity ON transfer_jobs(sourceid,fingerprint);
 CREATE INDEX IF NOT EXISTS transfer_job_due ON transfer_jobs(state,due,priority,created,id);
 CREATE INDEX IF NOT EXISTS transfer_job_page ON transfer_jobs(created DESC,id DESC);
+CREATE INDEX IF NOT EXISTS transfer_state_page ON transfer_jobs(state,created DESC,id DESC);
+CREATE INDEX IF NOT EXISTS transfer_job_rank ON transfer_jobs((priority-julianday(created)*24) DESC,created,id) WHERE lease IS NULL AND state IN ('WaitingForReady','Ready','RetryWaiting','ReconcileRequired');
+CREATE TABLE IF NOT EXISTS transfer_totals(state TEXT PRIMARY KEY,items INTEGER NOT NULL,bytes INTEGER NOT NULL);
+CREATE TRIGGER IF NOT EXISTS transfer_total_insert AFTER INSERT ON transfer_jobs WHEN NEW.current=1 BEGIN
+ INSERT INTO transfer_totals VALUES(NEW.state,1,COALESCE(json_extract(NEW.json,'$.File.Length'),0)) ON CONFLICT(state) DO UPDATE SET items=items+1,bytes=bytes+excluded.bytes; END;
+CREATE TRIGGER IF NOT EXISTS transfer_total_delete AFTER DELETE ON transfer_jobs WHEN OLD.current=1 BEGIN
+ UPDATE transfer_totals SET items=items-1,bytes=bytes-COALESCE(json_extract(OLD.json,'$.File.Length'),0) WHERE state=OLD.state; END;
+CREATE TRIGGER IF NOT EXISTS transfer_total_update_old AFTER UPDATE ON transfer_jobs WHEN OLD.current=1 BEGIN
+ UPDATE transfer_totals SET items=items-1,bytes=bytes-COALESCE(json_extract(OLD.json,'$.File.Length'),0) WHERE state=OLD.state; END;
+CREATE TRIGGER IF NOT EXISTS transfer_total_update_new AFTER UPDATE ON transfer_jobs WHEN NEW.current=1 BEGIN
+ INSERT INTO transfer_totals VALUES(NEW.state,1,COALESCE(json_extract(NEW.json,'$.File.Length'),0)) ON CONFLICT(state) DO UPDATE SET items=items+1,bytes=bytes+excluded.bytes; END;
 CREATE TABLE IF NOT EXISTS transfer_evidence(id TEXT PRIMARY KEY,jobid TEXT NOT NULL,pathkey TEXT NOT NULL,fingerprint TEXT NOT NULL,sha TEXT NOT NULL,json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS transfer_proof ON transfer_evidence(pathkey,fingerprint,sha);
 CREATE TABLE IF NOT EXISTS transfer_attempts(id TEXT PRIMARY KEY,jobid TEXT NOT NULL,utc TEXT NOT NULL,json TEXT NOT NULL);
@@ -35,7 +48,9 @@ CREATE INDEX IF NOT EXISTS transfer_attempt_job ON transfer_attempts(jobid,utc D
 CREATE TABLE IF NOT EXISTS transfer_revisions(id TEXT PRIMARY KEY,json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS transfer_operations(id TEXT PRIMARY KEY,utc TEXT NOT NULL,json TEXT NOT NULL);
 PRAGMA user_version=2;";
-                c.ExecuteNonQuery(); tx.Commit();
+                c.ExecuteNonQuery();
+                if (!hadTotals) { c.CommandText = "INSERT INTO transfer_totals SELECT state,COUNT(*),COALESCE(SUM(json_extract(json,'$.File.Length')),0) FROM transfer_jobs WHERE current=1 GROUP BY state"; c.ExecuteNonQuery(); }
+                tx.Commit();
             }
         }
         private static string PathKey(string path) => path.Replace('/', '\\').ToUpperInvariant();
@@ -151,6 +166,7 @@ PRAGMA user_version=2;";
                 using (var tx = _db.BeginTransaction())
                 {
                     TransferExec("INSERT OR REPLACE INTO transfer_policies VALUES($0,$1,$2,$3,$4)", tx, p.Id, p.Version, p.Enabled ? 1 : 0, p.Archived ? 1 : 0, Json(p));
+                    TransferExec("UPDATE transfer_jobs SET priority=$0 WHERE policyid=$1 AND lease IS NULL", tx, p.Priority, p.Id);
                     TransferExec("INSERT INTO transfer_revisions VALUES($0,$1)", tx, p.Id + "/" + p.Version, Json(p));
                     if (p.ProtectionRegistered)
                         TransferExec("INSERT OR REPLACE INTO transfer_guards VALUES($0,$1,$2,$3)", tx, p.Id + "/" + TransferRules.Digest(Json(new { p.LocalRoot, p.VolumeId, p.IncludeSubdirectories, p.Extensions, p.Exclusions, Fingerprint = TransferRules.DestinationFingerprint(p, c) })), p.Id,
@@ -199,7 +215,7 @@ created=excluded.created,updated=excluded.updated,lease=excluded.lease,json=excl
                     old.State = file.UnsupportedReason == null ? "WaitingForReady" : "NeedsAttention"; old.Detail = file.UnsupportedReason;
                     WriteTransferJob(old, null); return old;
                 }
-                using (var c = TransferCommand("SELECT COUNT(*) FROM transfer_jobs WHERE current=1 AND state NOT IN ('Completed','SourceMissing','Superseded')", null))
+                using (var c = TransferCommand("SELECT COALESCE(SUM(items),0) FROM transfer_totals WHERE state NOT IN ('Completed','SourceMissing','Superseded')", null))
                     if (Convert.ToInt64(c.ExecuteScalar()) >= TransferOptions().MaxPendingJobs) throw new TransferFailure("QueueFull", "전송 대기열 한도에 도달했습니다. 신규 탐색을 보류하고 기존 작업을 처리합니다.", true);
                 var connection = TransferConnection(policy.ConnectionId) ?? throw new TransferFailure("ConnectionMissing", "Connection이 없습니다.");
                 var job = new TransferJob { Policy = policy, Connection = connection, File = file, CreatedUtc = now, UpdatedUtc = now,
@@ -250,9 +266,16 @@ created=excluded.created,updated=excluded.updated,lease=excluded.lease,json=excl
             lock (_sync)
             {
                 if (TransferOptions().Paused) return null;
+                var args = new List<object> { now.ToString("O") };
+                Func<object, string> bind = value => { string name = "$" + args.Count; args.Add(value); return name; };
+                var eligible = TransferPolicies().Where(p => p.Enabled && !p.Archived && p.Trigger != TransferTrigger.Manual &&
+                    (p.Trigger == TransferTrigger.OnReady || TransferRules.InWindow(p, now.ToLocalTime()))).Select(p => p.Id).ToList();
+                string allowedPolicies = eligible.Count == 0 ? "0" : "j.policyid IN (" + string.Join(",", eligible.Select(x => bind(x))) + ")";
+                string connectionFilter = excludedConnections.Count == 0 ? "" : " AND j.connectionid NOT IN (" + string.Join(",", excludedConnections.Select(x => bind(x))) + ")";
                 var due = TransferRead<TransferJob>(@"SELECT j.json FROM transfer_jobs j JOIN transfer_policies p ON p.id=j.policyid
-WHERE j.lease IS NULL AND p.enabled=1 AND p.archived=0 AND j.due<=$0 AND j.state IN ('WaitingForReady','Ready','RetryWaiting','ReconcileRequired')
-ORDER BY j.priority + CAST((julianday($0)-julianday(j.created))*24 AS INTEGER) DESC,j.created,j.id LIMIT 128", now.ToString("O"));
+WHERE j.lease IS NULL AND p.enabled=1 AND p.archived=0 AND (j.current=1 OR j.state='ReconcileRequired') AND j.due<=$0 AND j.state IN ('WaitingForReady','Ready','RetryWaiting','ReconcileRequired')
+AND (" + allowedPolicies + @" OR json_extract(j.json,'$.ManualRequested')=1 OR j.state='ReconcileRequired')" + connectionFilter + @"
+ORDER BY (j.priority-julianday(j.created)*24) DESC,j.created,j.id LIMIT 128", args.ToArray());
                 foreach (var j in due)
                 {
                     if (excludedConnections.Contains(j.Connection.Id)) continue;
@@ -282,8 +305,9 @@ ORDER BY j.priority + CAST((julianday($0)-julianday(j.created))*24 AS INTEGER) D
         {
             lock (_sync)
             {
-                using (var c = TransferCommand("SELECT lease FROM transfer_jobs WHERE id=$0", null, job.Id))
-                    if (!string.Equals(c.ExecuteScalar() as string, job.LeaseToken, StringComparison.Ordinal)) return;
+                var live = TransferJob(job.Id);
+                if (live == null || live.LeaseToken != job.LeaseToken) return;
+                job.IsCurrent = live.IsCurrent;
                 job.LeaseToken = null; job.ManualRequested = false; job.UpdatedUtc = DateTime.UtcNow; WriteTransferJob(job, null);
             }
         }
@@ -291,8 +315,9 @@ ORDER BY j.priority + CAST((julianday($0)-julianday(j.created))*24 AS INTEGER) D
         {
             lock (_sync)
             {
-                using (var c = TransferCommand("SELECT lease FROM transfer_jobs WHERE id=$0", null, job.Id))
-                    if ((c.ExecuteScalar() as string) != job.LeaseToken) throw new InvalidOperationException("전송 lease가 변경되었습니다.");
+                var live = TransferJob(job.Id);
+                if (live == null || live.LeaseToken != job.LeaseToken) throw new InvalidOperationException("전송 lease가 변경되었습니다.");
+                job.IsCurrent = live.IsCurrent;
                 using (var tx = _db.BeginTransaction())
                 {
                     job.State = "Completed"; job.EvidenceLevel = evidence.Level; job.ErrorCode = null; job.Detail = evidence.VerificationMethod;
@@ -333,7 +358,7 @@ ORDER BY j.priority + CAST((julianday($0)-julianday(j.created))*24 AS INTEGER) D
             {
                 var j = TransferJob(id) ?? throw new ArgumentException("전송 작업이 없습니다.");
                 if (j.LeaseToken != null) throw new InvalidOperationException("현재 전송 중입니다.");
-                if (!j.IsCurrent) throw new InvalidOperationException("교체된 이전 세대의 파일은 재전송하지 않습니다.");
+                if (!j.IsCurrent && (!j.PublicationIntent || j.State == "Completed")) throw new InvalidOperationException("교체된 이전 세대의 파일은 재전송하지 않습니다.");
                 if (forceResend) throw new InvalidOperationException("결과 불명 파일의 강제 재게시를 자동 지원하지 않습니다. 원격 상태를 먼저 확인하세요.");
                 j.State = j.PublicationIntent && j.State != "Completed" ? "ReconcileRequired" : "Ready";
                 j.RecheckContent = j.State == "Ready" && !string.IsNullOrEmpty(j.SourceSha256); j.ManualRequested = true;
@@ -380,7 +405,7 @@ AND ($2 IS NULL OR created<$2 OR (created=$2 AND id<$3)) ORDER BY created DESC,i
         { lock (_sync) return TransferRead<TransferEvidence>("SELECT json FROM transfer_evidence WHERE jobid=$0", id); }
         public Dictionary<string, long> TransferCounts()
         {
-            lock (_sync) using (var c = TransferCommand("SELECT state,COUNT(*),COALESCE(SUM(json_extract(json,'$.File.Length')),0) FROM transfer_jobs WHERE current=1 GROUP BY state", null))
+            lock (_sync) using (var c = TransferCommand("SELECT state,items,bytes FROM transfer_totals WHERE items>0", null))
             using (var r = c.ExecuteReader())
             {
                 var d = new Dictionary<string, long>(); while (r.Read()) { d[r.GetString(0)] = r.GetInt64(1); d[r.GetString(0) + "Bytes"] = r.GetInt64(2); } return d;
@@ -396,10 +421,16 @@ AND ($2 IS NULL OR created<$2 OR (created=$2 AND id<$3)) ORDER BY created DESC,i
         {
             lock (_sync)
             {
-                foreach (var op in TransferRead<TransferOperation<object>>("SELECT json FROM transfer_operations"))
+                foreach (var op in TransferRead<TransferOperation<object>>("SELECT json FROM transfer_operations WHERE json_extract(json,'$.State')='Running'"))
                     if (op.State == "Running") { op.State = "Interrupted"; op.Error = "서비스 재시작으로 작업이 중단되었습니다. 상태를 확인한 뒤 다시 실행하세요."; SaveTransferOperation(op); }
                 TransferExec("DELETE FROM transfer_operations WHERE utc<$0", null, DateTime.UtcNow.AddDays(-7).ToString("O"));
             }
+        }
+        private void MaintainTransfers(string cutoff)
+        {
+            TransferExec("DELETE FROM transfer_attempts WHERE utc<$0 AND jobid NOT IN (SELECT id FROM transfer_jobs WHERE state IN ('PublicationUnknown','ReconcileRequired','NeedsAttention'))", null, cutoff);
+            TransferExec("DELETE FROM transfer_jobs WHERE current=0 AND lease IS NULL AND state='Superseded' AND created<$0 AND id NOT IN (SELECT jobid FROM transfer_evidence)", null, cutoff);
+            TransferExec("DELETE FROM transfer_operations WHERE utc<$0", null, DateTime.UtcNow.AddDays(-7).ToString("O"));
         }
         public void TransferAlert(string connectionId, string code, string message)
         {
@@ -430,7 +461,13 @@ AND ($2 IS NULL OR created<$2 OR (created=$2 AND id<$3)) ORDER BY created DESC,i
                     var evidence = TransferRead<TransferEvidence>("SELECT json FROM transfer_evidence WHERE pathkey=$0 AND fingerprint=$1", PathKey(file.Path), guard.Fingerprint)
                         .FirstOrDefault(x => x.Level == TransferEvidenceLevel.PublishedVerified && TransferRules.ValidSha256(x.SourceSha256) && TransferRules.SameFile(x.File, file) &&
                             (sha256 == null || string.Equals(x.SourceSha256, sha256, StringComparison.OrdinalIgnoreCase)) && x.SourceSha256 == x.RemoteSha256);
-                    if (evidence == null) return DeletionDecision.Hold(sha256 == null ? "AwaitingVerifiedUpload" : "TransferContentChanged");
+                    if (evidence == null)
+                    {
+                        if (sha256 != null)
+                            foreach (var job in TransferRead<TransferJob>("SELECT json FROM transfer_jobs WHERE pathkey=$0 AND current=1 AND state='Completed' AND lease IS NULL", PathKey(file.Path)))
+                            { job.RecheckContent = true; job.State = "Ready"; job.NextAttemptUtc = DateTime.UtcNow; WriteTransferJob(job, null); }
+                        return DeletionDecision.Hold(sha256 == null ? "AwaitingVerifiedUpload" : "TransferContentChanged");
+                    }
                     result.EvidenceIds.Add(evidence.Id);
                 }
                 return result;

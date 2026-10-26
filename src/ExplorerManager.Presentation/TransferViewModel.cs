@@ -17,6 +17,7 @@ namespace ExplorerManager.Presentation
         private TransferOverview _live = new TransferOverview();
         private TransferOptions _options = new TransferOptions();
         private bool _optionsDirty, _refreshing, _available;
+        private long _optionsGeneration;
         private TransferConnectionEditor _selectedConnection;
         private TransferPolicyEditor _selectedPolicy;
         private TransferJobRow _selectedJob;
@@ -34,6 +35,7 @@ namespace ExplorerManager.Presentation
                 var snapshot = editor.Snapshot(); TransferRules.ValidateConnection(snapshot); long revision = editor.EditVersion;
                 var saved = await _client.SendAsync<TransferConnection>("SaveTransferConnection", snapshot); editor.Accept(saved, revision); Message = "Connection을 저장했습니다. Set password로 자격 증명을 등록하세요.";
             });
+            ReloadConnectionCommand = Command(async () => { if (SelectedConnection == null) return; string id = SelectedConnection.Id; var state = await _client.SendAsync<TransferOverview>("TransferOverview"); var saved = state.Connections.FirstOrDefault(x => x.Id == id); if (saved != null && SelectedConnection?.Id == id) SelectedConnection.Reload(saved); });
             SaveSecretCommand = Command(async () => {
                 var c = SavedConnection(); var secrets = _ui as ITransferUiServices ?? throw new InvalidOperationException("이 화면에서는 password 입력을 지원하지 않습니다.");
                 string password = await secrets.RequestTransferPasswordAsync(); if (password == null) return;
@@ -49,6 +51,7 @@ namespace ExplorerManager.Presentation
                 var saved = await _client.SendAsync<TransferPolicy>("SaveTransferPolicy", snapshot); editor.Accept(saved, revision);
                 Message = saved.Enabled ? "자동 전송을 활성화했습니다. 삭제 연동과 상태를 확인하세요." : "전송 정책을 저장했습니다. Preview 후 활성화하세요.";
             });
+            ReloadPolicyCommand = Command(async () => { if (SelectedPolicy == null) return; string id = SelectedPolicy.Id; var state = await _client.SendAsync<TransferOverview>("TransferOverview"); var saved = state.Policies.FirstOrDefault(x => x.Id == id); if (saved != null && SelectedPolicy?.Id == id) SelectedPolicy.Reload(saved); });
             PickRootCommand = Command(async () => { if (SelectedPolicy == null) return; string path = await _ui.PickFolderAsync(); if (path == null) return; SelectedPolicy.LocalRoot = path;
                 var volume = Volumes.FirstOrDefault(x => path.StartsWith(x.Mount ?? "\0", StringComparison.OrdinalIgnoreCase)); if (volume != null) SelectedPolicy.VolumeId = volume.Id; });
             PreviewCommand = Command(async () => { RequireInputs(); var p = SelectedPolicy?.Snapshot() ?? throw new InvalidOperationException("전송 정책을 선택하세요.");
@@ -59,8 +62,8 @@ namespace ExplorerManager.Presentation
             PauseCommand = Command(async () => { await _client.SendAsync<object>("PauseTransfers", new { Now = false }); Message = "현재 파일을 마친 뒤 신규 전송을 일시정지합니다."; await RefreshAsync(true); });
             StopCommand = Command(async () => { await _client.SendAsync<object>("PauseTransfers", new { Now = true }); Message = "현재 I/O를 중단합니다. 다음 실행 시 원격 상태를 확인합니다."; await RefreshAsync(true); });
             ResumeCommand = Command(async () => { await _client.SendAsync<object>("ResumeTransfers"); await RefreshAsync(true); });
-            SaveOptionsCommand = Command(async () => { RequireInputs(); var saved = TransferEditor<TransferOptions>.Clone(_options); saved.Paused = _live.Options.Paused; TransferRules.ValidateOptions(saved);
-                await _client.SendAsync<object>("SaveTransferOptions", saved); _optionsDirty = false; Message = "전송 실행 옵션을 저장했습니다."; });
+            SaveOptionsCommand = Command(async () => { RequireInputs(); var saved = TransferEditor<TransferOptions>.Clone(_options); saved.Paused = _live.Options.Paused; TransferRules.ValidateOptions(saved); long generation = _optionsGeneration;
+                await _client.SendAsync<object>("SaveTransferOptions", saved); if (_optionsGeneration == generation) _optionsDirty = false; _optionsGeneration++; Message = "전송 실행 옵션을 저장했습니다."; });
             SearchCommand = Command(async () => { _cursor = null; _previous.Clear(); await LoadJobsAsync(); });
             NextCommand = Command(async () => { if (!_hasMore) return; _previous.Push(_cursor); _cursor = _nextCursor; await LoadJobsAsync(); });
             PreviousCommand = Command(async () => { if (_previous.Count == 0) return; _cursor = _previous.Pop(); await LoadJobsAsync(); });
@@ -118,7 +121,7 @@ namespace ExplorerManager.Presentation
             _detail.Job.Path + Environment.NewLine + _detail.Job.RemoteFinal + Environment.NewLine + "SHA-256: " + (_detail.Job.SourceSha256 ?? "not calculated") + Environment.NewLine +
             "Evidence: " + string.Join(", ", _detail.Evidence.Select(x => x.Level + " / " + x.VerificationMethod + " / " + x.Utc.ToLocalTime().ToString("g"))) + Environment.NewLine +
             string.Join(Environment.NewLine, _detail.Attempts.Take(6).Select(x => x.FinishedUtc.ToLocalTime().ToString("g") + " · " + x.State + " · " + x.ErrorCode + " " + x.Detail));
-        private void EditOption(Action action, string property) { action(); _optionsDirty = true; Changed(property); }
+        private void EditOption(Action action, string property) { _optionsDirty = true; _optionsGeneration++; action(); Changed(property); }
         private static int Range(int n, int min, int max) { if (n < min || n > max) throw new ArgumentOutOfRangeException(nameof(n), min + "–" + max); return n; }
         public int Workers { get => _options.Workers; set => EditOption(() => _options.Workers = Range(value, 1, 8), nameof(Workers)); }
         public int UploadMiB { get => (int)(_options.UploadBytesPerSecond / 1048576); set => EditOption(() => _options.UploadBytesPerSecond = Range(value, 0, 1024) * 1048576L, nameof(UploadMiB)); }
@@ -131,11 +134,12 @@ namespace ExplorerManager.Presentation
             Available = available; if (!available || _refreshing) return; _refreshing = true;
             try
             {
+                long generation = _optionsGeneration;
                 var live = await _client.SendAsync<TransferOverview>("TransferOverview"); _live = live;
                 foreach (var c in live.Connections) { var editor = Connections.FirstOrDefault(x => x.Id == c.Id); if (editor == null) Connections.Add(new TransferConnectionEditor(c)); else editor.Refresh(c); }
                 foreach (var p in live.Policies) { var editor = Policies.FirstOrDefault(x => x.Id == p.Id); if (editor == null) Policies.Add(new TransferPolicyEditor(p)); else editor.Refresh(p); }
                 if (SelectedConnection == null) SelectedConnection = Connections.FirstOrDefault(); if (SelectedPolicy == null) SelectedPolicy = Policies.FirstOrDefault();
-                if (!_optionsDirty) _options = TransferEditor<TransferOptions>.Clone(live.Options);
+                if (!_optionsDirty && generation == _optionsGeneration) _options = TransferEditor<TransferOptions>.Clone(live.Options);
                 Active.Clear(); foreach (var progress in live.Active) Active.Add(progress);
                 foreach (string name in new[] { nameof(Status), nameof(PendingCount), nameof(CompletedCount), nameof(AttentionCount), nameof(PendingBytes), nameof(RateText), nameof(Workers), nameof(UploadMiB), nameof(DownloadMiB), nameof(ReadMiB), nameof(MaxPendingJobs), nameof(MaxAttemptSeconds) }) Changed(name);
                 if (IsActive && SelectedPanel == 0) await LoadJobsAsync();
@@ -154,11 +158,13 @@ namespace ExplorerManager.Presentation
         private static string Csv(string value) { value = value ?? ""; if (value.Length > 0 && "=+-@".IndexOf(value[0]) >= 0) value = "'" + value; return "\"" + value.Replace("\"", "\"\"") + "\""; }
         public AsyncCommand NewConnectionCommand { get; }
         public AsyncCommand SaveConnectionCommand { get; }
+        public AsyncCommand ReloadConnectionCommand { get; }
         public AsyncCommand SaveSecretCommand { get; }
         public AsyncCommand TestConnectionCommand { get; }
         public AsyncCommand TestUploadCommand { get; }
         public AsyncCommand NewPolicyCommand { get; }
         public AsyncCommand SavePolicyCommand { get; }
+        public AsyncCommand ReloadPolicyCommand { get; }
         public AsyncCommand PickRootCommand { get; }
         public AsyncCommand PreviewCommand { get; }
         public AsyncCommand BackfillCommand { get; }

@@ -200,7 +200,7 @@ namespace ExplorerManager.Tests
                 var j = f.Add(); await f.Run(); f.Source.Files[j.Path].Bytes[100] ^= 1; f.Store.RequestTransferRetry(j.Id, "test"); await f.Run();
                 Assert.Equal("Superseded", f.Store.TransferJob(j.Id).State); Assert.Single(f.Store.TransferEvidenceForJob(j.Id));
                 Assert.False(f.Store.CheckDeletion(j.File, TransferTestContext.Hash(f.Source.Files[j.Path].Bytes)).Allowed);
-                bool more; var jobs = f.Store.TransferJobs(null, null, null, 100, out more); Assert.Equal(2, jobs.Count); Assert.Single(jobs.Where(x => x.IsCurrent));
+                bool more; var jobs = f.Store.TransferJobs(null, null, null, 100, out more); Assert.Equal(2, jobs.Count); Assert.Single(jobs, x => x.IsCurrent);
             }
         }
         [Fact] public async Task CancellationAtPublicationPersistsReconcileIntent()
@@ -236,13 +236,13 @@ namespace ExplorerManager.Tests
                 var p = f.Store.TransferPolicy(f.Policy.Id); p.RequireVerifiedUpload = false; Assert.Throws<InvalidOperationException>(() => f.Store.SaveTransferPolicy(p, "test"));
             }
         }
-        [Fact] public void FinalCommitPermitSerializesNewGuardPublication()
+        [Fact] public async Task FinalCommitPermitSerializesNewGuardPublication()
         {
             using (var f = new TransferTestContext()) using (var entered = new ManualResetEventSlim())
             {
                 var p = f.Store.TransferPolicy(f.Policy.Id); p.Priority = 5; Task save;
                 using (f.Store.AcquireCommitPermit()) { save = Task.Run(() => { entered.Set(); f.Store.SaveTransferPolicy(p, "test"); }); Assert.True(entered.Wait(1000)); Assert.False(save.IsCompleted); }
-                save.GetAwaiter().GetResult(); Assert.Equal(5, f.Store.TransferPolicy(p.Id).Priority);
+                await save; Assert.Equal(5, f.Store.TransferPolicy(p.Id).Priority);
             }
         }
         [Fact] public void PagingIsBoundedAndUsesStableCreationCursor()

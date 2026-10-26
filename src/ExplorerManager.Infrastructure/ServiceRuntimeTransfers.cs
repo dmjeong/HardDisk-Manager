@@ -29,6 +29,7 @@ namespace ExplorerManager.Infrastructure
         }
         private string TransferStopReason(TransferPolicy policy)
         {
+            lock (_sync) if (_busy && !_activeSafetyChecks) return "Restore in progress";
             var all = Interlocks(new DrivePolicy { VolumeId = policy.VolumeId });
             var blocked = all.FirstOrDefault(x => x.Blocking && x.Code != "ManualPause" && x.Code != "ProcessRunning" && x.Code != "ProcessInspectionUnavailable");
             return blocked == null ? null : blocked.Code + ": " + blocked.Detail;
@@ -71,7 +72,8 @@ namespace ExplorerManager.Infrastructure
                 case "ArchiveTransferPolicy":
                     string archiveId = Required(d, "Id"); _store.ArchiveTransferPolicy(archiveId, caller.Sid); _transfers.CancelActive(archiveId); return true;
                 case "SaveTransferOptions":
-                    _store.SaveTransferOptions(d.ToObject<TransferOptions>(), caller.Sid); _transfers.RefreshOptions(); return true;
+                    var options = d.ToObject<TransferOptions>(); options.Paused = _store.TransferOptions().Paused;
+                    _store.SaveTransferOptions(options, caller.Sid); _transfers.RefreshOptions(); return true;
                 case "PauseTransfers":
                     var paused = _store.TransferOptions(); paused.Paused = true; _store.SaveTransferOptions(paused, caller.Sid); _transfers.RefreshOptions();
                     if ((bool?)d["Now"] == true) _transfers.CancelActive(); return true;

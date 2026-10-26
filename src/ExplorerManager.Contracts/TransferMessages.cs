@@ -34,7 +34,7 @@ namespace ExplorerManager.Contracts
         public static TransferJobRow From(TransferJob j) => new TransferJobRow { Id = j.Id, PolicyName = j.Policy.Name, ConnectionName = j.Connection.Name,
             Path = Clip(j.Path, 1024), RemoteFinal = Clip(j.RemoteFinal, 1024), Bytes = j.Bytes, State = j.State, EvidenceLevel = j.EvidenceLevel,
             CreatedUtc = j.CreatedUtc, UpdatedUtc = j.UpdatedUtc, NextAttemptUtc = j.NextAttemptUtc == DateTime.MaxValue ? null : (DateTime?)j.NextAttemptUtc,
-            Attempts = j.Attempts, ErrorCode = j.ErrorCode, Detail = Clip(j.Detail, 400), Progress = j.State == "Completed" ? 100 : 0 };
+            Attempts = j.Attempts, ErrorCode = j.ErrorCode, Detail = Clip(j.Detail, 400), Progress = j.State == "Completed" ? 100 : j.Bytes <= 0 ? 0 : Math.Min(100, 100.0 * (j.State == "VerifyingRemote" ? j.BytesVerified : j.BytesSent) / j.Bytes) };
         private static string Clip(string value, int length) => value?.Length > length ? value.Substring(0, length) + "…" : value;
     }
     public sealed class TransferJobPage

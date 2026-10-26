@@ -338,12 +338,13 @@ namespace ExplorerManager.Infrastructure
                 case "Restore":
                     string cacheId = Required(d, "Id"); string directory = (string)d["Directory"];
                     var entry = _cache.List().FirstOrDefault(x => x.Id == cacheId) ?? throw new InvalidOperationException("복구본이 퇴출되었습니다.");
-                    return StartOperation(async ct => { await _engine.RestoreAsync(cacheId, directory, _store.Policy(entry.PolicyId), caller.Sid, ct).ConfigureAwait(false); }, entry.PolicyId, true);
+                    string restoreOperation = StartOperation(async ct => { await _engine.RestoreAsync(cacheId, directory, _store.Policy(entry.PolicyId), caller.Sid, ct).ConfigureAwait(false); }, entry.PolicyId, true);
+                    _transfers.CancelActive(); return restoreOperation;
                 case "RestoreFolder":
                     string folder = PathGuard.Normalize(Required(d, "Path"));
                     var entries = _cache.List().Where(x => PathGuard.Within(x.Path, folder)).OrderBy(x => x.Path.Length).ToList();
                     if (entries.Count == 0) throw new InvalidOperationException("남아 있는 복구본이 없습니다.");
-                    return StartOperation(async ct =>
+                    string folderOperation = StartOperation(async ct =>
                     {
                         foreach (var e in entries)
                         {
@@ -351,6 +352,7 @@ namespace ExplorerManager.Infrastructure
                             await _engine.RestoreAsync(e.Id, null, _store.Policy(e.PolicyId), caller.Sid, ct).ConfigureAwait(false);
                         }
                     }, entries[0].PolicyId, true);
+                    _transfers.CancelActive(); return folderOperation;
                 case "Acknowledge":
                     var alert = _store.Alert(Required(d, "Id")) ?? throw new InvalidOperationException("알람이 없습니다.");
                     alert.Acknowledged = true; _store.SaveAlert(alert); _store.RecordEvent("AlertAcknowledged", caller.Sid, alert.Id, ""); return true;
