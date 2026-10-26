@@ -4,20 +4,20 @@
 
 ## 화면
 
-Dashboard·Policies·History·Recovery·Monitoring·Alerts·Settings 메뉴로 구성했습니다. 메뉴와 기술 레이블은 영어, 설명과 삭제·복구 확인 문장은 한국어로 자연스럽게 혼용합니다. 아래는 실제 WPF 컨트롤을 예시 데이터로 렌더링한 화면입니다. 표시된 드라이브·기록·센서 값은 운영 데이터가 아닙니다.
+Dashboard·Policies·History·Recovery·Monitoring·Alerts·Settings·Transfers 메뉴로 구성했습니다. 메뉴와 기술 레이블은 영어, 설명과 삭제·복구 확인 문장은 한국어로 자연스럽게 혼용합니다. 아래는 실제 WPF 컨트롤을 예시 데이터로 렌더링한 화면입니다. 표시된 드라이브·기록·센서 값은 운영 데이터가 아닙니다.
 
 ![Explorer Manager 개요](docs/images/overview.png)
 
-[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/39874432958)
+[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [Transfers](docs/images/transfers.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40295863609)
 
 ## 실행 구성
 
 - WPF · .NET Framework 4.8 · x64 · MVVM
-- Windows Service: 스케줄, 삭제, 감사 이력, 용량 설정이 가능한 전역 RAM 복구 캐시
-- Desktop: 정책, 미리보기, 실행 상태, 이력/CSV, 복구, 알람, 트레이
+- Windows Service: 스케줄, 삭제, 감사 이력, 전역 RAM 복구 캐시, 백그라운드 이미지 전송
+- Desktop: 정책, 미리보기, 실행 상태, 이력/CSV, 복구, 알람, 트레이, FTP/FTPS 설정과 대기열
 - SensorHost: CPU/디스크 센서 수집과 장애 격리. 기본 설치는 읽기 전용 LocalSystem 센서 서비스도 등록
 - Named Pipe: 관리자 인증, 로컬 전용, 요청 중복 실행 방지
-- SQLite: 정책·삭제 저널·알람·성능 집계
+- SQLite: 정책·삭제 저널·알람·성능 집계·영속 전송 대기열과 검증 증빙
 
 ## 설치
 
@@ -73,6 +73,25 @@ CPU 사용률, 가용 RAM, 볼륨 용량, 디스크 읽기·쓰기 처리량/IOP
 
 센서 드라이버가 보안 정책에 의해 차단되면 해당 센서를 사용할 수 없습니다. OS 보안 설정을 자동으로 낮추지 않습니다.
 
+## 이미지 전송
+
+**Transfers**에서 지정 경로의 이미지를 기존 FTP/FTPS 서버에 전송합니다. 수신 프로그램 변경이나 별도 서버 설치는 필요하지 않습니다. Explicit/Implicit FTPS와 명시적으로 선택하는 Plain FTP, UTF-8/CP949 인코딩, EPSV/PASV, 원본 이름·하위 폴더 유지, 자동 감지·스케줄·수동 backfill을 지원합니다. TCP 전용 수신기는 실제 framing·파일명·완료 응답 규격이 있어야 추가할 수 있습니다.
+
+1. **Connections → New → Save**에서 주소·포트·계정·암호화 방식을 저장합니다. **Set password**로 비밀번호를 별도 등록합니다. 비밀번호는 서비스가 DPAPI로 암호화해 보관합니다.
+2. **Test connection**으로 로그인하고, 상위 수신기가 감시하지 않는 전용 시험 폴더에서 **Test upload**를 실행합니다. 읽기 검증·APPE 이어 보내기·rename이 가능한지 실제로 시험하고 시험 파일만 제거합니다.
+3. **Transfer policies → New**에서 로컬 NTFS 루트, Connection, 원격 최종·staging 경로를 지정합니다. 상위 서버에 원격 루트와 staging 폴더를 미리 만들어 두고 권한을 부여합니다. 서비스 계정에는 로컬 이미지 읽기 권한이 필요합니다.
+4. **Preview**로 범위를 확인합니다. 수신기의 임시 이름/staging 처리 방식과 장비별 독립 목적지 또는 고유 파일명을 확인한 뒤 해당 체크 항목과 **Enabled**를 선택해 저장합니다. **Queue & history**에서 진행·시도·검증 수준을 확인합니다.
+
+기본은 임시 업로드 → 원격 SHA-256/RETR read-back 검증 → 최종 경로 rename입니다. 검증된 성공 파일만 기존 정리 조건에 따라 삭제할 수 있고, 삭제 직전 RAM 복구본의 SHA-256과 증빙을 다시 비교합니다. 검증 전·전송 중·결과 불명·내용 변경 이미지는 보호합니다. Pause·Archive·감시 누락·서비스 재시작으로 기존 보호가 풀리지 않습니다. 보호가 등록된 원본 루트·대상 서버는 첫 버전에서 변경하거나 보호를 해제할 수 없습니다.
+
+읽기/hash 권한이 없는 서버는 **Independent + Size only**로 업로드할 수 있으나 삭제 보호 성공 증빙으로 사용할 수 없습니다. 업로드된 파일을 수신기가 즉시 소비하고 완료 응답까지 유실한 경우에는 **Needs review / PublicationUnknown**으로 보류합니다. FTP 완료는 상위 업무 처리나 영구 보관을 보장하는 응답이 아닙니다.
+
+기본 worker 2개, 업로드·검증 다운로드·물리 디스크 읽기 각각 10 MiB/s, 안정화 10초, 재검색 300초입니다. 실행 옵션에서 동시성·속도·대기열/시도 한도를 조절합니다. Pause는 현재 작업을 마치고 중단하며 Stop now는 취소 후 재조정합니다. 리소스·감사·디스크 이상 Interlock과 복구 작업은 진행 중 전송도 중단시킵니다. 전송은 고정 버퍼로 스트리밍하며 RAM 복구 예산을 소비하지 않습니다.
+
+![Transfers 예시 화면](docs/images/transfers.png)
+
+[Policies](docs/images/transfer-policies.png) · [Connections](docs/images/transfer-connections.png) · [Execution options](docs/images/transfer-options.png) · [운영 설정·오류 대응](docs/operations.md#이미지-전송-설정과-운영) · [상세 설계](docs/02-design/features/image-transfer.design.md) · [구현과 검증](docs/04-report/image-transfer.report.md)
+
 ## 빌드와 검증
 
 Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NET Framework 4.8 SDK/타기팅 팩**을 설치합니다. 모든 프로젝트는 기존 .NET Framework 프로젝트 형식이며, .NET 8 런타임·SDK·타기팅 팩을 요구하지 않습니다. NuGet 패키지는 프로젝트를 처음 열 때 복원합니다.
@@ -93,14 +112,15 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 3. 이전 평가 결과가 남아 있으면 `.vs`와 각 프로젝트의 `bin`·`obj`를 지우고 솔루션을 다시 엽니다.
 4. NuGet 패키지 복원 후 다시 빌드합니다. .NET Framework 4.8 **개발 팩**은 런타임과 별개이므로 설치 관리자에서 확인합니다.
 
-솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 185개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·7개 WPF 화면의 기본/최소 크기 및 예시 데이터 렌더·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
+솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 238개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·8개 WPF 메뉴와 전송 내부 설정 화면의 기본/최소 크기 및 예시 데이터 렌더45장·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
 
 ## 운영과 문서
 
 - [개발 계획](docs/01-plan/features/explorer-manager.plan.md)
 - [기술 설계](docs/02-design/features/explorer-manager.design.md)
-- [이미지 전송 개발 계획 — 구현 예정](docs/01-plan/features/image-transfer.plan.md)
-- [기존 FTP/TCP 서버 연동 상세 설계 — 구현 예정](docs/02-design/features/image-transfer.design.md)
+- [이미지 전송 개발 계획](docs/01-plan/features/image-transfer.plan.md)
+- [기존 FTP/FTPS 서버 연동 상세 설계](docs/02-design/features/image-transfer.design.md)
+- [이미지 전송 구현·검증 결과](docs/04-report/image-transfer.report.md)
 - [운영 매뉴얼](docs/operations.md)
 - [구현·검증 현황](docs/implementation-status.md)
 - [제3자 라이선스](THIRD-PARTY-NOTICES.md)

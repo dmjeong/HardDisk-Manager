@@ -1,10 +1,23 @@
 # Image Transfer — 상세 구현 설계
 
-작성일: 2026-10-26 · 설계 버전: 1.0 · 상태: 구현 전
+작성일: 2026-10-26 · 설계 버전: 1.1 · 상태: FTP/FTPS 구현·Windows 검증 완료
 
 대상: Explorer Manager, WPF / .NET Framework 4.8 / x64 / C# 7.3 / MVVM
 
-기준 코드: `69c08c8` · [개발 계획](../../01-plan/features/image-transfer.plan.md)
+최초 설계 기준 코드: `69c08c8` · [개발 계획](../../01-plan/features/image-transfer.plan.md) · [구현 검증](../../03-analysis/image-transfer.analysis.md)
+
+### 구현 시 확정한 사항
+
+아래 본문의 확장 설계와 구분하여 이번 배포의 실제 동작은 다음과 같다. 운영 절차는 [매뉴얼](../../operations.md#이미지-전송-설정과-운영)을 따른다.
+
+- FTP/Explicit·Implicit FTPS를 제공하고 TCP adapter는 기존 수신 명세 확보 후 구현한다. 수신 프로그램은 변경하지 않는다.
+- `FluentFTP 55.1.0`의 Framework용 assembly를 고정한다. worker는 파일 attempt마다 독립 session을 사용한다. 제품 target은 모두 .NET Framework 4.8/C#7.3/x64다.
+- 완료 판단은 metadata 안정화 + 쓰기/삭제를 배제하는 native read lease + SHA-256이다. 별도 marker/manifest adapter는 포함하지 않는다. read lease와 디스크 lane은 한 attempt의 원격 검증·게시가 끝날 때까지 유지하고 장기 재시도 대기 전에 해제한다.
+- 이어 보내기는 **실제 시험으로 확인한 APPE**와 원격 prefix hash를 사용한다. REST+STOR는 사용하지 않는다. 자신의 임시 파일 정리가 실패하면 보류하며 새 orphan을 계속 만들지 않는다.
+- 보호가 등록된 route의 원본/목적지는 고정한다. 확장자/제외 범위를 줄이거나 Pause/Archive해도 이전 보호 revision을 유지한다. 보호 해제·동일 원본의 목적지 이관 UI는 이번 버전에 없다.
+- Schedule은 새 파일 작업 시작 시간에 적용하며 진행 중 파일은 완료한다. 정책 변경·복구·Interlock·명시적 Stop now는 진행 중 파일도 취소한다. 정리 전용 process 차단 목록은 전송에 적용하지 않는다.
+- 목록은100건 keyset page, 현재 세대의 상태/바이트 집계는 SQLite trigger가 갱신한다. 연결32개/정책64개/정책16 KiB/전송 대기열 설정 상한을 적용한다. 자세한 큐 예측/수신 업무 ACK/대규모 장비 실측은 제공된 정보로 확인하지 않는다.
+- 기본 보안/호환성 체크는 운영자가 확인하는 필수 정책 입력이다. 서버에 접속하지 않은 상태로 capability나 상위 업무 완료를 성공 처리하지 않는다.
 
 ## 1. 결정 사항과 추천 구성
 
@@ -256,10 +269,10 @@ claim은 짧은 SQLite transaction으로 하나의 due job을 선택하고 `(Sta
 
 ### 8.1 라이브러리와 연결 수명
 
-`FluentFTP`를 후보로 사용한다. 구현 시 Framework 4.8에서 빌드되는 안정 버전을 고정하고 실제 adapter 시험을 통과시킨다. 패키지 버전을 이 설계만으로 최신이라고 단정하지 않는다. 프레임워크를 .NET 8로 올리지 않는다. FTP를 직접 문자열 파서부터 구현하는 범위를 줄이고 기존 라이브러리의 서버 호환 기능을 활용한다. [FluentFTP 공식 저장소](https://github.com/robinrodricks/FluentFTP)
+`FluentFTP 55.1.0`을 고정해 Framework 4.8용 adapter를 구현했다. NuGet의 Framework4.7.2 assembly를 사용하며 전이 의존성은 없다. 프레임워크를 .NET 8로 올리지 않는다. 패키지 소스 기준 commit은 `f051d6425342bc99617d933af3580f718c381f64`이며 실제 control/data socket 시험을 수행한다. [FluentFTP 공식 저장소](https://github.com/robinrodricks/FluentFTP)
 
 - worker당 한 FTP session을 사용한다. 한 session에 여러 작업의 명령을 동시에 보내지 않는다.
-- 연결은 연속 작업에 재사용하고 인증/목적지/인코딩 변경 시 교체한다.
+- 현재는 파일 attempt마다 새 연결을 사용해 이전 reply를 격리한다. 연속 작업 session pool은 후속 성능 개선 항목이다.
 - lease에서 얻은 `Stream`을 전송 API에 넘긴다. 라이브러리가 파일 경로를 다시 열어 다른 내용을 보내지 않도록 한다.
 - 전체 파일 `byte[]`를 만들지 않는다. high-level API를 쓰더라도 resume·재시도·검증·overwrite 부작용을 adapter 시험으로 확인한다.
 - 라이브러리 내부 자동 재시도와 coordinator 재시도를 중첩하지 않는다. 원격 mutation의 정책은 coordinator가 소유한다.
@@ -275,7 +288,7 @@ claim은 짧은 SQLite transaction으로 하나의 due job을 선택하고 `(Sta
 | 파일 목록/크기 | MLST/MLSD 또는 서버별 LIST/SIZE | 확인 불가로 표시, missing으로 간주하지 않음 |
 | 서버 SHA-256 | FEAT 및 실제 hash 명령 시험 | RETR read-back 검증 |
 | RETR 권한 | 시험 파일 다운로드 hash | 강한 검증 불가 표시 |
-| 업로드 resume | REST와 STOR 조합의 실제 시험 | 본인 임시 파일을 처음부터 다시 전송 |
+| 업로드 resume | APPE 조합과 내용 hash의 실제 시험 | 본인 임시 파일을 처음부터 다시 전송 |
 | rename | 시험 위치에서 RNFR/RNTO 및 소비 동작 확인 | 기존 수신기의 DirectWrite 규칙 확인 |
 | 하위 폴더 생성 | MKD 권한 확인 | 기존 폴더만 사용, 경로 오류 보류 |
 | TLS/passive/인코딩 | 데이터 채널 포함 실제 접속/파일명 시험 | 명시적 설정 수정, 자동 보안 downgrade 없음 |
@@ -291,7 +304,7 @@ SHA-256 지원을 MD5/CRC 등과 혼동하지 않는다. 서버가 제공하는 
 2. immutable descriptor / 최종 경로 / 임시 경로 / source hash를 DB에 저장
 3. 연결·로그인·TYPE I·passive 데이터 연결 준비
 4. 최종 경로 충돌 확인, 임시 경로의 기존 상태 확인
-5. STOR 또는 검증된 REST+STOR → 스트리밍 → 최종 transfer reply 확인
+5. STOR 또는 검증된 APPE → 스트리밍 → 최종 transfer reply(226/250) 확인
 6. 원격 임시 파일의 크기와 SHA-256 검증
 7. Publishing intent를 DB에 durable 기록
 8. 최종 경로 충돌 재확인 → RNFR 임시 경로 → RNTO 최종 경로
@@ -335,7 +348,7 @@ DirectWrite에서는 최종 이름이 처음 노출되기 전 `Publishing` inten
 2. 원본을 다시 열어 전체 hash가 기존 descriptor와 같은지 확인한다.
 3. 원격 크기 `r`을 조회한다. `r < 0`, `r > 원본 길이`, 상태 Unknown이면 resume하지 않는다.
 4. 원격 prefix 내용과 로컬 첫 `r` bytes를 hash로 비교할 수 있을 때만 검증된 resume로 분류한다. 원격 임시 파일 전체가 prefix이므로 RETR로 읽어 비교할 수 있다.
-5. 서버가 실제 upload restart를 지원하면 `REST r` 후 `STOR`, 로컬 stream position=`r`로 전송한다.
+5. Test upload에서 APPE가 실제 검증된 서버면 `APPE`와 로컬 stream position=`r`로 이어 보낸다. 일반 REST 광고만으로 활성화하지 않는다.
 6. 최종 전체 hash 검증을 다시 수행한다. offset만 맞는 것은 검증이 아니다.
 
 resume가 불가하면 본인 소유 임시 파일을 정책에 따라 재시작한다. 원격 최종 파일이나 다른 작업의 파일을 지우지 않는다. 임시 파일 정리 권한이 없으면 새 attempt 경로를 만들되 누적 orphan 수/용량을 제한하고 알람을 남긴다. 디스크 spool이나 RAM 전체 복사로 우회하지 않는다.

@@ -59,6 +59,77 @@ Recovery에서 현재 캐시에 남은 항목을 선택합니다. 원래 위치 
 
 72시간 연속 운전, 100만 파일·16볼륨의 대규모 부하, 실제 모델별 센서 정확도는 설치 장비에서 현장 인수 시험으로 확인합니다.
 
+## 이미지 전송 설정과 운영
+
+전송은 Windows Service 안의 별도 작업자가 처리하므로 Desktop을 종료해도 계속됩니다. FTP/FTPS 클라이언트이며 상위 수신 프로그램을 변경하거나 새 프로토콜을 설치하지 않습니다. TCP 전용 서버는 기존 애플리케이션 수신 명세가 필요하며 현재 연결 유형에 포함하지 않습니다.
+
+### 접속과 권한
+
+Transfers → Connections → New connection에서 서버 이름, Host/IP, Port, Username, Transport security, Filename encoding을 입력하고 Save connection을 누릅니다. 기본은 Explicit FTPS/21, UTF-8, EPSV입니다. Implicit FTPS는 서버 포트도 함께 변경합니다. EPSV를 해제하면 제어 연결 주소를 사용하는 PASV입니다. FTPS는 Windows가 신뢰하는 인증서와 서버 이름 일치를 검사하며 실패 시 Plain FTP로 전환하지 않습니다.
+
+Set password는 일회성 입력창으로 서비스에만 전달합니다. 비밀번호는 DPAPI LocalMachine과 Connection ID를 사용해 암호화하고 서비스 Data ACL로 보호합니다. UI 조회·CSV·전송 모델에는 비밀번호를 반환하지 않습니다. 다른 PC로 DB만 복사한 경우 새 PC에서 다시 등록해야 합니다. 비밀번호 변경은 이미 완료된 파일의 목적지 식별을 변경하지 않습니다.
+
+Test connection은 로그인/기능 확인만 합니다. Test upload · 32 KiB는 수신기가 감시하지 않는 기존 시험 폴더에 고유 파일을 만들고 읽기 검증, APPE, rename을 확인한 뒤 해당 파일만 정리합니다. 연결·업로드 시험과 Preview는 작업 ID로 비동기 실행되며 다른 UI 조회를 막지 않습니다. 서비스 종료 또는 제한 시간 초과 시 중단된 상태를 표시합니다.
+
+| 서버 항목 | 필요한 설정 |
+|---|---|
+| 최종 루트·staging 루트 | 운영자가 기존 폴더를 생성하고 FTP 로그인 기준 `/incoming/...` 형태로 지정 |
+| 기본 게시 | STOR + SIZE, 목록 조회, SHA-256 또는 RETR, RNFR/RNTO 권한 |
+| 하위 폴더 생성 | Create remote subfolders 선택 시 MKD, 미선택 시 전체 하위 구조를 미리 준비 |
+| 이어 보내기 | Test upload에서 APPE·읽기 hash가 실제 통과한 경우만 사용, 실패 시 자신이 만든 임시 파일부터 다시 전송 |
+| 테스트 정리 | 자신의 고유 시험 파일에 대한 DELE 권한 |
+| 로컬 원본 | 서비스 계정 읽기·경로 탐색 권한, 로컬 NTFS 일반 파일 |
+
+### 정책과 범위
+
+Transfer policies에서 New policy → Connection/Source volume/Local root/Remote root/Staging root를 지정합니다. 이미지 확장자, 제외 폴더, 하위 폴더 포함·구조 유지, 기존 파일 backfill, 이미지 signature 검사, 안정화·재검색·스캔 제한, 파일 상한, 우선순위, Trigger/요일/HH:mm을 설정합니다. 기본 확장자는 JPG/JPEG/PNG/BMP/TIF/TIFF이며 WebP도 signature 검사로 지원합니다. 임의 확장자는 signature 검사를 끈 경우에만 처리할 수 있고 이미지 변환·압축은 하지 않습니다.
+
+기본은 10초 동안 크기·수정 시각이 안정된 파일입니다. 읽기 lease가 쓰기/삭제/이름 변경을 차단한 상태에서 원본을 해시하고 전송합니다. 쓰기 핸들이 열려 있으면 재시도합니다. 별도의 생산 완료 manifest/marker는 읽지 않으므로 생산기는 임시 이름으로 저장한 뒤 최종 이미지 이름으로 rename하고 이후 원본을 변경하지 않는 방식이 적합합니다. 원본을 반복 덮어쓰는 프로그램과의 잠금 영향은 현장에서 확인합니다.
+
+기존 파일도 기본 전송 대상입니다. Backfill existing files를 끄면 최초 스캔의 기존 파일은 Not selected 상태로 보호되며 전송하지 않습니다. Run queued / backfill로 기존 미전송 파일을 포함해 실행할 수 있습니다. Manual Trigger는 이 명령을 실행해야 전송하며 Schedule은 설정한 시간대에 새 작업을 시작합니다. 시간대 경계에서 이미 시작한 파일은 완료하고, 정책 변경·Archive·안전 Interlock은 진행 중 작업도 취소합니다.
+
+Preview는 저장 전 초안의 수·바이트·경로 표본을 확인하며 파일을 업로드하지 않습니다. 상위 수신기의 임시 이름/staging 호환성과 장비별 독립 경로 또는 고유 파일명을 확인한 체크 항목이 있어야 Enabled로 저장할 수 있습니다. 활성화 전에는 전송과 삭제 보호가 등록되지 않습니다. 원본 경로가 다른 전송 정책과 겹치면 저장을 거부합니다. Connection은 최대32개, 정책은 최대64개, 한 정책의 직렬화 크기는16 KiB입니다.
+
+### 게시·검증과 삭제 보호
+
+| Publish mode | 동작과 수신기 조건 |
+|---|---|
+| Staging then rename | 감시 밖 staging에 업로드·검증한 후 최종 위치로 이동. 같은 서버 내 rename 지원 필요 |
+| Same directory rename | 최종 이름 뒤 `.em-<job ID>.part`로 업로드·검증. 수신기가 임시 파일을 무시해야 함 |
+| Direct write | 최종 이름으로 직접 기록. 작성 중 파일 처리와 즉시 소비 규칙이 맞는 서버에서만 사용 |
+
+원격 기존 파일은 길이·강한 hash가 같을 때 Already present로 인정하고 다르면 Conflict로 보류합니다. 이름을 임의 변경하거나 다른 파일을 덮어쓰지 않습니다. FTP에는 원자적 no-overwrite rename을 보장하는 범용 기능이 없으므로 목적지에 다른 작성자가 같은 이름을 쓰지 않아야 합니다. 하위 구조를 평탄화하면 서로 다른 폴더의 같은 파일명이 충돌할 수 있습니다.
+
+Auto strong은 서버 SHA-256을 우선하고 사용할 수 없으면 RETR read-back을 고정 버퍼로 해시합니다. Read-back SHA-256은 항상 읽어서 확인합니다. Size only는 크기와 FTP 응답만 검사하므로 Require verified upload를 끈 Independent 정책에서만 허용합니다. 검증 수준은 Queue & history와 Details에 표시합니다. 상위 업무 완료·이후 보관·서버 디스크 fsync는 FTP 증빙으로 확인하지 않습니다.
+
+Require verified upload가 활성화되면 감시가 아직 발견하지 못한 이미지까지 경로 규칙으로 먼저 보호합니다. 게시된 강한 증빙이 있는 동일 파일만 정리 후보가 되며 삭제 직전 RAM 복구본의 현재 SHA-256과 증빙을 비교합니다. 내용이 다르면 삭제를 막고 재검사를 예약합니다. 삭제 이력에 증빙 ID와 원본 hash를 함께 기록합니다. 업로드 완료 자체가 삭제를 실행하지는 않습니다.
+
+보호가 등록된 정책을 Pause/Archive하거나 확장자·제외 경로를 줄여도 이미 등록한 보호 범위는 유지됩니다. 첫 버전은 보호 해제 명령을 제공하지 않으며 보호된 원본 루트·서버·최종 경로는 고정합니다. 해당 필드를 바꾸려면 별도 원본 범위의 새 정책이 필요합니다. 기존 정책을 Archive해도 같은 원본 루트의 새 정책 등록은 중첩으로 거부합니다. 운영 중 목적지 이관은 자동 처리하지 않습니다.
+
+### 대기열과 실행 제한
+
+Queue & history는 검색·상태 필터·최대100건 cursor 페이지와 Export page를 제공합니다. Details에서 원본/원격 경로, hash, FTP 응답, 재시도 시각과 최근100회 시도 내역을 확인합니다. 대기열·시도·검증 증빙은 manager.db에 저장되며 재시작 시 실행 lease를 회수하고 원격 결과부터 재조정합니다. 파일 변경은 새 세대로 구분하며 같은 metadata의 Changed 이벤트와 기본24시간 내용 audit도 적용합니다. audit 주기를0으로 설정하면 정기 내용 검사를 끕니다.
+
+Execution options 기본값은 workers2, 전역 업로드/검증 다운로드10 MiB/s, 물리 디스크 읽기10 MiB/s, 대기열100만 건, 시도3600초입니다. 0 MiB/s는 제한 없음이며 workers는1~8입니다. 같은 물리 디스크의 정리·전송 읽기는 lane을 공유합니다. 토폴로지를 알 수 없는 볼륨은 알려진 디스크와도 충돌하도록 보수적으로 직렬화하며 장치 구성 변경 후에는 서비스를 재시작해 매핑을 갱신합니다. 우선순위1~5에 대기 시간 aging을 더해 오래 기다린 작업도 처리합니다.
+
+Pause after file은 새 전송 claim을 중단하고 실행 중 파일을 완료합니다. Stop now는 취소 후 재조정하며 자신의 임시 파일만 이어 보내기 대상으로 사용합니다. Archive/정책 변경은 해당 전송을 취소합니다. 전송 Pause와 기존 정리 Pause는 별개입니다. RAM/CPU/온도/I/O·최신 측정·Critical 디스크·감사 장애 Interlock은 전송에도 적용합니다. 정리 차단용 Process 목록은 생산 중 이미지 전송을 일괄 막지 않으며 복구 시작 시에는 전송을 취소하고 복구가 끝날 때까지 새 전송을 보류합니다.
+
+### 전송 장애 대응
+
+| 상태/오류 | 처리 |
+|---|---|
+| Source locked / Waiting | 쓰기 핸들 종료와 안정화 시간을 기다림. 생산 프로세스를 자동 종료하지 않음 |
+| Authentication / Credential | 주소·계정 확인 후 Set password. 실패 계정은 차단하며 변경 후 재시도 |
+| TLS authentication | 서버 이름·인증서 체인·Windows 신뢰 저장소 점검. 보안 방식을 자동 하향하지 않음 |
+| Remote state unknown | 목록/SIZE 권한과 서버 응답을 확인. 부재로 추측하여 덮어쓰지 않음 |
+| Verification unavailable | SHA-256 또는 RETR 권한 부여. 엄격한 보호에서 Size only로 자동 전환하지 않음 |
+| Hash mismatch / Conflict | 로컬 원본과 서버 파일, 파일명 충돌 점검. 원본 보호와 기존 원격 파일 유지 |
+| Publication unknown | 게시 응답 유실·즉시 소비 가능성. Retry / reconcile은 상태 확인만 하며 무조건 재업로드하지 않음 |
+| Queue full / Destination full | 원본 공간·대기열·상위 할당량 확인. 미전송 원본을 삭제하여 공간 확보하지 않음 |
+| Interlock / Audit unavailable | Dashboard와 Alerts에서 차단 원인 해결. 삭제 보호는 유지 |
+
+첫 schema2 업그레이드 전 `manager.db.pre-v2.bak`을 SQLite backup으로 남깁니다. 다운그레이드는 지원하지 않으며 구버전 실행 대신 서비스 중지·호환 버전 복구와 검토된 백업 절차를 사용합니다. 증빙과 보호 범위는 단순한 이력 만료로 제거하지 않으므로 DB 한도를 넘길 수 있습니다. 진단은 service.log와 Transfer Alerts를 확인하고 실제 수신기의 기능·성능·장시간 운전은 소규모 시험 후 확대합니다.
+
 ## Interlocks 운영
 
 Dashboard의 Interlocks는 각 조건의 Clear/Pending/Tripped/Recovering/AwaitingReset/Unknown 상태와 차단 여부를 구분합니다. Settings의 RAM reserve는 캐시 예산과 별개인 시스템 가용 RAM 하한(기본1024 MiB)입니다. RAM 부족·지정 앱 실행·측정 오래됨은 즉시 차단하며 CPU·온도·활성 디스크 지연은 Trip delay(기본60초)를 적용합니다. 모니터링은 2초 주기로 측정하며 watchdog은 1초 주기로 진행 중 정리의 취소를 확인합니다.
