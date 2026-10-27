@@ -42,6 +42,14 @@ try {
     $running=Get-CimInstance Win32_Process -Filter "Name='ExplorerManager.Desktop.exe'" | Where-Object { $_.ExecutablePath -eq "$install\Desktop\ExplorerManager.Desktop.exe" }
     if (-not $running) { throw 'Setup.cmd did not launch the installed Desktop.' }
     Write-Host 'PASS: packaged Setup.cmd from a Unicode/space path, upgrade and installed Desktop launch.'
+    # A failed replacement must restart the original binaries without deleting saved data.
+    Remove-Item "$launcherFolder/app/Service/Newtonsoft.Json.dll" -Force
+    $failed=$false
+    try { & "$launcherFolder/Install.ps1" -InstallDirectory $install -NoStartUi -NoAutoStart } catch { $failed=$true; Write-Host 'Expected damaged-package startup failure caught.' }
+    if (-not $failed) { throw 'Damaged-package replacement unexpectedly succeeded.' }
+    (Get-Service ExplorerManager).WaitForStatus('Running',[TimeSpan]::FromSeconds(30))
+    if (-not (Test-Path "$install/Service/Newtonsoft.Json.dll")) { throw 'Rollback failed to restore the original dependency.' }
+    Write-Host 'PASS: failed service replacement restores previous binaries and restarts the service.'
 } finally {
     foreach ($process in @($newUi,$oldUi)) { if ($process -and -not $process.HasExited) { $process.Kill() } }
     if (Test-Path "$install/.explorermanager-install.json") { & "$repo/scripts/Uninstall.ps1" -InstallDirectory $install }

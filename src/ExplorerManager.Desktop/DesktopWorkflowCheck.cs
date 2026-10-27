@@ -83,7 +83,7 @@ namespace ExplorerManager.Desktop
                 Require(File.Exists(Path.Combine(root, "expired.txt")), "Preview preserves source file");
                 // Exercise actual deletion, RAM cache and restore with only this isolated fixture.
                 saved = (await client.SendAsync<Dashboard>("Dashboard")).Policies.Single(x => x.Id == id);
-                saved.ThresholdMode = ThresholdMode.FreeBytes; saved.StartThreshold = (double)target.TotalBytes + 1048576; saved.StopThreshold = saved.StartThreshold + 1;
+                saved.ThresholdMode = ThresholdMode.FreeBytes; saved.StartThreshold = (double)target.TotalBytes - 1048576; saved.StopThreshold = target.TotalBytes;
                 saved = await client.SendAsync<DrivePolicy>("SavePolicy", saved);
                 await vm.RefreshAsync(); await UntilAsync(() => vm.SelectedPolicy.Version == saved.Version, 15);
                 Invoke(FindButton(window, "지금 정리"));
