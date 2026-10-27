@@ -8,7 +8,7 @@ Dashboard·Policies·History·Recovery·Monitoring·Alerts·Settings·Transfers 
 
 ![Explorer Manager 개요](docs/images/overview.png)
 
-[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [Transfers](docs/images/transfers.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40428806793)
+[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [Transfers](docs/images/transfers.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40447002247)
 
 ## 실행 구성
 
@@ -98,7 +98,7 @@ CPU 사용률, 가용 RAM, 볼륨 용량, 디스크 읽기·쓰기 처리량/IOP
 
 Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NET Framework 4.8 SDK/타기팅 팩**을 설치합니다. 모든 프로젝트는 기존 .NET Framework 프로젝트 형식이며, .NET 8 런타임·SDK·타기팅 팩을 요구하지 않습니다. NuGet 패키지는 프로젝트를 처음 열 때 복원합니다.
 
-`ExplorerManager.sln`을 열고 `ExplorerManager.Desktop`을 시작 프로젝트로 지정합니다. F5 빌드는 Service/SensorHost와 Setup 파일도 준비합니다. 서비스가 없으면 실제 로컬 볼륨·CPU·RAM을 읽기 전용으로 보여 주며 **서비스 설치/시작**에서 관리자 실행과 설치를 진행할 수 있습니다. 정책 저장·정리·복구는 서비스 연결 후 동작합니다. 실행 중 서비스에 대한 연결 버튼은 서비스를 재설치하거나 RAM 캐시를 지우지 않습니다.
+Visual Studio를 관리자 권한으로 실행한 뒤 `ExplorerManager.sln`을 열고 `ExplorerManager.Desktop`을 시작 프로젝트로 지정합니다. F5 빌드는 Service/SensorHost와 Setup 파일도 준비합니다. 서비스가 없으면 실제 로컬 볼륨·CPU·RAM을 읽기 전용으로 보여 주며 **서비스 설치/시작**에서 관리자 실행과 설치를 진행할 수 있습니다. 정책 저장·정리·복구는 서비스 연결 후 동작합니다. 실행 중 서비스에 대한 연결 버튼은 서비스를 재설치하거나 RAM 캐시를 지우지 않습니다.
 
 개발자 PowerShell에서 솔루션 빌드와 .NET Framework 시험을 실행합니다. 시험 실행에는 Visual Studio Test Explorer/Test Tools가 필요합니다.
 
@@ -114,7 +114,7 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 3. 이전 평가 결과가 남아 있으면 `.vs`와 각 프로젝트의 `bin`·`obj`를 지우고 솔루션을 다시 엽니다.
 4. NuGet 패키지 복원 후 다시 빌드합니다. .NET Framework 4.8 **개발 팩**은 런타임과 별개이므로 설치 관리자에서 확인합니다.
 
-솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 243개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·8개 WPF 메뉴와 전송 내부 설정 화면의 기본/최소 크기 및 예시 데이터 렌더45장·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
+솔루션의 모든 앱·라이브러리·시험 대상은 .NET Framework 4.8/x64입니다. CI는 .NET SDK 경로를 비활성화한 상태에서 Framework MSBuild로 빌드하고, 246개 시험, WPF 디자인 시점 참조 평가, 실제 NTFS 삭제·복구, 서비스 설치·IPC·8개 WPF 메뉴와 전송 내부 설정 화면의 기본/최소 크기 및 예시 데이터 렌더45장·제거 시험을 실행합니다. 실행 패키지는 `artifacts/ExplorerManager-win-x64.zip`입니다. 코드 서명은 `Build.ps1 -CertificateThumbprint ...`로 보유 인증서를 지정할 때 적용됩니다. 기본 CI 패키지는 서명되지 않습니다.
 
 ## 운영과 문서
 
@@ -124,7 +124,7 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 - [기존 FTP/FTPS 서버 연동 상세 설계](docs/02-design/features/image-transfer.design.md)
 - [이미지 전송 구현·검증 결과](docs/04-report/image-transfer.report.md)
 - [운영 매뉴얼](docs/operations.md)
-- [Desktop 1.0.1 기본 동작 수정과 실제 UI 검증](docs/04-report/desktop-reliability.report.md)
+- [Desktop 1.0.2 수정·업데이트와 실제 UI 검증](docs/04-report/desktop-reliability.report.md)
 - [구현·검증 현황](docs/implementation-status.md)
 - [제3자 라이선스](THIRD-PARTY-NOTICES.md)
 

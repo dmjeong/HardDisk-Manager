@@ -1,4 +1,45 @@
-# Desktop 1.0.1 수정 결과
+# Desktop 1.0.2 수정 및 실제 설치 검증
+
+2026-10-27 · 검증 코드 `0534ab9` · [Windows CI](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40447002247)
+
+사용자가 1.0.1에서도 동작 실패를 보고하여 신규 설치뿐 아니라 기존 설치 업데이트, 저장된 정책 편집, 실제 삭제·복구, 배포 실행기와 실패 복원으로 검증을 확대했다. 정확한 운영 PC 오류는 제공되지 않아 해당 PC의 해결을 직접 확인한 것은 아니다.
+
+## 수정한 원인
+
+- Dashboard의 고정 버전 문자열을 실제 assembly 버전으로 교체했다. Desktop/Service 버전이 다르면 연결된 상태에서도 업데이트 안내가 나타난다.
+- 모든 IPC가 관리자 토큰을 요구하는데 Desktop은 asInvoker로 실행하던 불일치를 수정했다. 일반 실행에서 UAC를 요청하며 Visual Studio 디버깅은 관리자 실행을 사용한다.
+- 주기적 갱신에서 PolicyEditor를 계속 새로 만들어 입력·오류 상태를 초기화하던 코드를 ID/version 기반으로 변경했다. 여러 정책의 미저장 초안을 유지하고 삭제 명령은 선택한 초안만 제거한다.
+- 작업 완료·캐시 변화 및 History 화면에서 이력을 갱신한다.
+- 실행 중 설치본을 덮어쓰지 않고 정확한 경로의 Desktop 종료 및 서비스 종료를 확인한 뒤 staged 파일로 교체한다. 실패 시 이전 바이너리를 복원하고 기존 실행 서비스를 다시 시작한다. 설정·정책·이력 데이터는 제거하지 않는다.
+- Setup.cmd가 설치 프로세스 자체의 완료를 기다리도록 했다. Uninstall도 Desktop 프로세스 종료를 확인한 뒤 파일을 제거한다.
+- 설치 transcript, Desktop 시작/오류 로그, Diagnostics logs 버튼을 제공한다. 요청 본문과 FTP 비밀번호는 로그에 쓰지 않는다. 선택적 센서/자동 시작 작업 등록 실패가 핵심 서비스 설치를 막지 않게 했다.
+
+## 검증 결과
+
+- Windows .NET Framework4.8/x64 빌드 및 WPF design-time 참조 평가 성공, **246/246 시험 통과**.
+- 서비스 없는 실제 Desktop: 로컬 볼륨/CPU 실측, 설치 안내, X 종료.
+- 실제 설치 버튼 → 인증 IPC → 물리 드라이브/CPU/disk I/O → 볼륨 선택 → 정책 오류 수정 → 저장/Preview.
+- 저장된 정책에 잘못된 숫자를 입력한 뒤 3초 polling이 지나도 입력값과 빨간 표시가 유지되며, 수정하면 정상 저장.
+- 실제 fixture 삭제, UI History의 DeletedConfirmed 갱신, RAM 복구 후 원본 바이트 일치, Settings 저장, Hide/Show/Exit.
+- 실제 1.0.1 소스를 빌드·설치하고 그 Desktop이 실행 중인 상태에서 업데이트. 새 서비스 버전 및 기존 정책/설정 보존 확인.
+- 동일 버전의 실행 중 설치본 재설치, 공백/한글 경로에서 배포 ZIP의 Setup.cmd 실행과 설치된 Desktop 시작 확인.
+- 서비스 의존성 DLL을 제거한 시험 패키지로 시작 실패 유도. 이전 DLL·바이너리 복원과 서비스 Running 상태 확인.
+- 실제/예시 WPF 화면45장, 바인딩 오류0건. 실제 서비스 설치·IPC·렌더·제거 모두 성공.
+- 보조 검증: macOS의 portable source 시험111개 통과, Framework4.8/C#7.3 의미 컴파일 통과.
+
+`desktop-offline.log`, `desktop-workflow.log`, `desktop-upgrade.log` 및 Windows 작업 로그에 각 PASS를 남겼다. 손상된 패키지의 실패는 의도한 rollback 시험이며 마지막 서비스 연동 시험은 복원 후 새로 설치한 정상 패키지로 통과했다.
+
+## 적용
+
+전체 ZIP을 압축 해제하고 **Setup.cmd**를 실행하면 기존 설치까지 함께 교체한다. Desktop/Service 버전은 왼쪽 아래에서 확인한다. 서비스 재시작으로 RAM 복구본이 사라지므로 필요한 파일을 먼저 복구한다. 데이터베이스의 정책·설정·이력은 유지된다. 설치/앱 진단은 `%LocalAppData%\ExplorerManager\Logs`에 저장된다.
+
+운영 PC의 실제 하드웨어 온도 센서와 상위 FTP 서버는 해당 장비/서버에서 검증해야 한다. 이 수정은 수신 서버나 프로토콜을 변경하지 않는다.
+
+---
+
+## 이전 1.0.1 검증 기록
+
+### Desktop 1.0.1 수정 결과
 
 2026-10-27 · 검증한 코드 `c581f87` · [Windows CI](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40428806793)
 
