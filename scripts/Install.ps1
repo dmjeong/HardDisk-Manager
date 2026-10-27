@@ -66,7 +66,8 @@ New-Item $InstallDirectory -ItemType Directory -Force | Out-Null
 & icacls.exe $InstallDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Executable ACL configuration failed.' }
 Copy-Item "$source/*" $InstallDirectory -Recurse -Force
-Set-Content (Join-Path $InstallDirectory '.explorermanager-install.json') (@{Path=$InstallDirectory;Version='1.0.0'} | ConvertTo-Json) -Encoding UTF8
+if (Test-Path "$PSScriptRoot/Grant-ManagedRoot.ps1") { Copy-Item "$PSScriptRoot/Grant-ManagedRoot.ps1" "$InstallDirectory/Grant-ManagedRoot.ps1" -Force }
+Set-Content (Join-Path $InstallDirectory '.explorermanager-install.json') (@{Path=$InstallDirectory;Version='1.0.1'} | ConvertTo-Json) -Encoding UTF8
 $serviceExe = Join-Path $InstallDirectory 'Service\ExplorerManager.Service.exe'
 Set-ExplorerService 'ExplorerManager' 'Explorer Manager' ('"'+$serviceExe+'"') 'NT SERVICE\ExplorerManager'
 & sc.exe config ExplorerManager start= delayed-auto | Out-Null

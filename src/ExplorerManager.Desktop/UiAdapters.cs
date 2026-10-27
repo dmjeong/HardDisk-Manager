@@ -79,6 +79,7 @@ namespace ExplorerManager.Desktop
             await WindowsDesktopIntegration.EnsureServiceAsync(AppDomain.CurrentDomain.BaseDirectory);
         }
         public void HideToTray() => _owner.Hide();
+        public Task GrantFolderAccessAsync(string path) => WindowsDesktopIntegration.GrantFolderAccessAsync(AppDomain.CurrentDomain.BaseDirectory, path);
         public void ExitDesktop() => System.Windows.Application.Current.Shutdown();
     }
 }

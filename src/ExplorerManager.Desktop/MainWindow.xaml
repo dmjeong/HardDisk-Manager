@@ -90,7 +90,7 @@
          <StackPanel><TextBlock Text="Policy name" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding SelectedPolicy.Name,UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Policy name"/></StackPanel>
          <StackPanel Grid.Column="2"><TextBlock Text="Target volume" Style="{StaticResource FieldLabel}"/><ComboBox ToolTip="{Binding SelectedItem.Summary,RelativeSource={RelativeSource Self}}" ItemsSource="{Binding Volumes}" DisplayMemberPath="Summary" SelectedValuePath="Id" SelectedValue="{Binding SelectedPolicy.VolumeId}" AutomationProperties.Name="Target volume"/></StackPanel>
         </Grid>
-        <DockPanel Margin="0,18,0,8"><Button Content="Add folder…" DockPanel.Dock="Right" Command="{Binding AddRootCommand}" Padding="10,5" MinHeight="30"/><TextBlock Text="관리할 폴더" Foreground="{StaticResource MutedBrush}"/></DockPanel>
+        <DockPanel Margin="0,18,0,8"><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Grant access…" Command="{Binding GrantAccessCommand}" Padding="10,5" MinHeight="30" Margin="0,0,8,0"/><Button Content="Add folder…" Command="{Binding AddRootCommand}" Padding="10,5" MinHeight="30"/></StackPanel><TextBlock Text="관리할 폴더" Foreground="{StaticResource MutedBrush}"/></DockPanel>
         <TextBox Text="{Binding SelectedPolicy.Roots,UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="80" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="관리할 폴더 경로"/>
         <TextBlock Text="한 줄에 한 경로를 입력하세요." Style="{StaticResource MutedText}" FontSize="11" Margin="0,7,0,0"/>
        </StackPanel></Border>

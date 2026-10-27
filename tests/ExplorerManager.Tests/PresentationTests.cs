@@ -341,6 +341,7 @@ namespace ExplorerManager.Tests
         {
             public int Setups, Exited, Hidden;
             public Task SetupServiceAsync() { Setups++; return Task.CompletedTask; }
+            public Task GrantFolderAccessAsync(string path) => Task.CompletedTask;
             public void HideToTray() { Hidden++; }
             public void ExitDesktop() { Exited++; }
             public bool InputsValid => true;

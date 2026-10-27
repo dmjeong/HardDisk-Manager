@@ -58,7 +58,9 @@ namespace ExplorerManager.Infrastructure
                     string.Equals(root, Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("등록할 수 없는 루트: " + root);
                 if (!string.Equals(WindowsVolumeCatalog.Read(Path.GetPathRoot(root)).Id, p.VolumeId, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("정책과 다른 볼륨의 경로입니다.");
-                using (var guards = new DirectoryGuards(root)) { }
+                try { using (var guards = new DirectoryGuards(root)) { } }
+                catch (Win32Exception ex) when (ex.NativeErrorCode == 5)
+                { throw new UnauthorizedAccessException("서비스 계정이 관리 폴더 또는 상위 경로를 조회할 수 없습니다. Policies의 Grant access… 또는 Grant-ManagedRoot.ps1로 권한을 부여한 뒤 다시 저장하세요: " + root, ex); }
             }
             for (int i = 0; i < roots.Count; i++)
                 for (int j = i + 1; j < roots.Count; j++) if (Within(roots[i], roots[j]) || Within(roots[j], roots[i])) throw new ArgumentException("중복 또는 중첩 루트입니다.");

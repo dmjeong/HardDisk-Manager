@@ -44,6 +44,7 @@ namespace ExplorerManager.Presentation
     public interface IDesktopHost
     {
         Task SetupServiceAsync();
+        Task GrantFolderAccessAsync(string path);
         void HideToTray();
         void ExitDesktop();
     }

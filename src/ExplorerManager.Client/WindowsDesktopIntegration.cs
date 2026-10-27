@@ -78,5 +78,16 @@ namespace ExplorerManager.Client
                 if (process.ExitCode != 0) throw new InvalidOperationException("서비스 설치에 실패했습니다. 설치 창의 오류와 Windows 서비스 권한을 확인하세요. (" + process.ExitCode + ")");
             }
         }
+        public static async Task GrantFolderAccessAsync(string applicationDirectory, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || path.IndexOfAny(new[] { '"', '\r', '\n', '\0' }) >= 0) throw new ArgumentException("관리할 폴더 경로를 확인하세요.");
+            string script = null; var folder = new DirectoryInfo(Path.GetFullPath(applicationDirectory));
+            for (int depth = 0; folder != null && depth < 8 && script == null; depth++, folder = folder.Parent)
+                foreach (string candidate in new[] { Path.Combine(folder.FullName, "Setup", "Grant-ManagedRoot.ps1"), Path.Combine(folder.FullName, "Grant-ManagedRoot.ps1") })
+                    if (File.Exists(candidate)) { script = candidate; break; }
+            if (script == null) throw new FileNotFoundException("권한 설정 스크립트를 찾을 수 없습니다. 최신 전체 패키지로 설치하세요.");
+            var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"), "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -Path \"" + path.TrimEnd('\\') + "\"") { UseShellExecute = true, Verb = "runas" };
+            using (var process = Process.Start(info)) { await Task.Run(() => process.WaitForExit()).ConfigureAwait(false); if (process.ExitCode != 0) throw new InvalidOperationException("폴더 권한 설정에 실패했습니다. 보호 경로·junction·관리자 권한을 확인하세요."); }
+        }
     }
 }

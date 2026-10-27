@@ -110,6 +110,14 @@ namespace ExplorerManager.Presentation
             SetupServiceCommand = Command(async () => { Message = "서비스 설치·시작 중입니다. Windows 권한 확인창과 설치 창을 확인하세요."; await Host().SetupServiceAsync(); await RefreshAfterCommandAsync(); });
             HideCommand = new ActionCommand(() => Host().HideToTray());
             ExitCommand = new ActionCommand(() => Host().ExitDesktop());
+            GrantAccessCommand = Command(async () => {
+                if (!IsServiceConnected) throw new InvalidOperationException("서비스 설치/시작을 먼저 완료하세요.");
+                var roots = SelectedPolicy?.ToPolicy().Roots;
+                if (roots == null || roots.Count == 0) throw new InvalidOperationException("관리할 폴더를 먼저 입력하세요.");
+                if (!await _ui.ConfirmAsync("서비스 폴더 접근 권한", string.Join(Environment.NewLine, roots) + "\n\n서비스 계정에 이 폴더의 읽기·삭제·복구 권한을 부여합니다. 상위 폴더에는 탐색·속성 조회만 허용합니다.")) return;
+                foreach (string root in roots) await Host().GrantFolderAccessAsync(root);
+                Message = "서비스 폴더 접근 권한을 부여했습니다. Save policy로 저장하세요.";
+            });
         }
         private IDesktopHost Host() => _ui as IDesktopHost ?? throw new InvalidOperationException("이 환경에서는 Desktop 관리 동작을 지원하지 않습니다.");
         private AsyncCommand Command(Func<Task> action) => new AsyncCommand(action, Error);
@@ -272,6 +280,7 @@ namespace ExplorerManager.Presentation
         public AsyncCommand SaveSettingsCommand { get; }
         public AsyncCommand ElevateCommand { get; }
         public AsyncCommand SetupServiceCommand { get; }
+        public AsyncCommand GrantAccessCommand { get; }
         public ActionCommand HideCommand { get; }
         public ActionCommand ExitCommand { get; }
         public async Task RefreshAsync(bool discardPolicyChanges = false)

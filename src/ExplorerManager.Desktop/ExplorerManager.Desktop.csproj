@@ -59,6 +59,6 @@
     <Copy SourceFiles="@(_SetupService)" DestinationFiles="@(_SetupService->'$(TargetDir)Setup\app\Service\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_SetupSensors)" DestinationFiles="@(_SetupSensors->'$(TargetDir)Setup\app\SensorHost\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_SetupDesktop)" DestinationFiles="@(_SetupDesktop->'$(TargetDir)Setup\app\Desktop\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\scripts\Install.ps1" DestinationFolder="$(TargetDir)Setup" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\scripts\Install.ps1;$(MSBuildProjectDirectory)\..\..\scripts\Grant-ManagedRoot.ps1" DestinationFolder="$(TargetDir)Setup" SkipUnchangedFiles="true" />
   </Target>
 </Project>
