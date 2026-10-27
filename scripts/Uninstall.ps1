@@ -21,6 +21,13 @@ if (Get-Service ExplorerManager -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -ne 0) { throw 'Service removal failed.' }
 }
 Unregister-ScheduledTask -TaskName 'ExplorerManager.Desktop' -Confirm:$false -ErrorAction SilentlyContinue
-Get-Process ExplorerManager.Desktop -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$InstallDirectory\*" } | Stop-Process
+$desktopPath=Join-Path $InstallDirectory 'Desktop\ExplorerManager.Desktop.exe'
+foreach ($instance in @(Get-CimInstance Win32_Process -Filter "Name='ExplorerManager.Desktop.exe'" | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath,$desktopPath,[StringComparison]::OrdinalIgnoreCase) })) {
+    $process=Get-Process -Id $instance.ProcessId -ErrorAction SilentlyContinue
+    if ($process) {
+        $null=$process.CloseMainWindow()
+        if (-not $process.WaitForExit(3000)) { $process.Kill(); if (-not $process.WaitForExit(5000)) { throw 'Installed Desktop did not exit; refusing to remove loaded binaries.' } }
+    }
+}
 Remove-Item $InstallDirectory -Recurse -Force
 Write-Host 'Removed application and service. Policies, logs and audit metadata remain in ProgramData\ExplorerManager.'

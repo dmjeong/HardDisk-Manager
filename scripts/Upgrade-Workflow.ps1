@@ -50,7 +50,7 @@ try {
     (Get-Service ExplorerManager).WaitForStatus('Running',[TimeSpan]::FromSeconds(30))
     if (-not (Test-Path "$install/Service/Newtonsoft.Json.dll")) { throw 'Rollback failed to restore the original dependency.' }
     Write-Host 'PASS: failed service replacement restores previous binaries and restarts the service.'
-} finally {
+} catch { Write-Warning $_.Exception.ToString(); throw } finally {
     foreach ($process in @($newUi,$oldUi)) { if ($process -and -not $process.HasExited) { $process.Kill() } }
     if (Test-Path "$install/.explorermanager-install.json") { & "$repo/scripts/Uninstall.ps1" -InstallDirectory $install }
     Copy-Item "$env:LOCALAPPDATA/ExplorerManager/Logs/*.log" "$repo/artifacts" -ErrorAction SilentlyContinue
