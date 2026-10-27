@@ -55,7 +55,7 @@ namespace ExplorerManager.Desktop
                 var target = vm.Volumes.First(x => x.HasCapacity && root.StartsWith(x.Mount, StringComparison.OrdinalIgnoreCase));
                 var item = (ComboBoxItem)volume.ItemContainerGenerator.ContainerFromItem(target);
                 Require(item != null && Descendants(item).OfType<TextBlock>().Any(t => !string.IsNullOrWhiteSpace(t.Text)), "Dropdown entries render visible text");
-                ((ISelectionItemProvider)new ComboBoxItemAutomationPeer(item).GetPattern(PatternInterface.SelectionItem)).Select();
+                item.IsSelected = true;
                 volume.IsDropDownOpen = false;
                 name.Text = "UI workflow " + Guid.NewGuid().ToString("N"); folders.Text = root;
                 var retention = Find<TextBox>(window, "Retention (days)"); retention.Text = "0"; await LayoutAsync(window);
