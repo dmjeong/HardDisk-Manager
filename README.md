@@ -8,7 +8,7 @@ Dashboard·Policies·History·Recovery·Monitoring·Alerts·Settings·Transfers 
 
 ![Explorer Manager 개요](docs/images/overview.png)
 
-[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [Transfers](docs/images/transfers.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40295863609)
+[Policies](docs/images/policies.png) · [Monitoring](docs/images/monitoring.png) · [Settings](docs/images/settings.png) · [Transfers](docs/images/transfers.png) · [UI 설계](docs/02-design/features/ui-refresh.design.md) · [검증 결과와 패키지](https://github.com/dmjeong/HardDisk-Manager/actions/runs/40428806793)
 
 ## 실행 구성
 
@@ -26,7 +26,7 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 1. [Actions](https://github.com/dmjeong/HardDisk-Manager/actions)에서 성공한 실행의 `ExplorerManager-win-x64` artifact를 받습니다.
 2. 그 안의 `ExplorerManager-win-x64.zip`을 완전히 압축 해제합니다.
 3. Desktop.exe를 실행하고 **서비스 설치/시작**을 누르거나 관리자 Windows PowerShell 5.1에서 `./Install.ps1`을 실행합니다. Windows 권한 확인창을 승인하면 서비스와 센서를 설치합니다.
-4. 관리할 폴더에 서비스 권한을 부여합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
+4. Policies의 **Grant access…**로 관리 폴더에 서비스 권한을 부여하거나 실행합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
 5. WPF 앱을 관리자 권한으로 실행하고 **Save policy → Preview → 결과 확인 → 자동 정리 활성화** 순서로 설정합니다.
 
 삭제 서비스 이름은 `ExplorerManager`(전용 가상 계정), 하드웨어 센서 서비스는 `ExplorerManagerSensors`(LocalSystem)입니다. 센서 서비스는 측정값만 제공하며 삭제·프로세스 종료 명령을 받지 않습니다. `Install.ps1 -NoHardwareSensors`로 관리자 센서를 제외할 수 있습니다.
@@ -122,6 +122,7 @@ Windows에서 Visual Studio 2022의 **.NET 데스크톱 개발** 구성과 **.NE
 - [기존 FTP/FTPS 서버 연동 상세 설계](docs/02-design/features/image-transfer.design.md)
 - [이미지 전송 구현·검증 결과](docs/04-report/image-transfer.report.md)
 - [운영 매뉴얼](docs/operations.md)
+- [Desktop 1.0.1 기본 동작 수정과 실제 UI 검증](docs/04-report/desktop-reliability.report.md)
 - [구현·검증 현황](docs/implementation-status.md)
 - [제3자 라이선스](THIRD-PARTY-NOTICES.md)
 
