@@ -35,6 +35,7 @@ public static class ExplorerFolderAcl {
    IntPtr owner,group,dacl,sacl,descriptor; uint code=GetSecurityInfo(handle,1,4,out owner,out group,out dacl,out sacl,out descriptor);
    if(code!=0) throw new Win32Exception((int)code);
    try {
+    if(dacl==IntPtr.Zero) return; // An unrestricted DACL already permits the service; preserve it.
     byte[] bytes=new byte[GetSecurityDescriptorLength(descriptor)]; Marshal.Copy(descriptor,bytes,0,bytes.Length);
     var security=new DirectorySecurity(); security.SetSecurityDescriptorBinaryForm(bytes,AccessControlSections.Access);
     var sid=(SecurityIdentifier)new NTAccount("NT SERVICE", "ExplorerManager").Translate(typeof(SecurityIdentifier));
@@ -58,6 +59,8 @@ public static class ExplorerFolderAcl {
 $ancestors=@()
 $parent=Split-Path $full -Parent
 while ($parent) {
+    # Do not rewrite a volume root ACL or request MAXIMUM_ALLOWED on the shared root handle.
+    if ($parent.TrimEnd('\') -eq [IO.Path]::GetPathRoot($parent).TrimEnd('\')) { break }
     if ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse ancestors are not allowed.' }
     $ancestors+=,$parent
     $next=Split-Path $parent -Parent
