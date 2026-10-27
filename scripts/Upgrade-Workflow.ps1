@@ -33,6 +33,15 @@ try {
     if (-not $oldUi.HasExited) { throw 'Same-version reinstall did not close the installed Desktop.' }
     Write-Host (Get-Content "$repo/artifacts/desktop-upgrade.log" -Raw)
     Write-Host 'PASS: same-version reinstall with installed Desktop open.'
+    # Run the shipped double-click entry point from a path with spaces and Korean characters.
+    $launcherFolder=Join-Path $env:RUNNER_TEMP ('Explorer Manager '+[char]0xD55C+[char]0xAE00)
+    Expand-Archive -LiteralPath "$repo/artifacts/ExplorerManager-win-x64.zip" -DestinationPath $launcherFolder -Force
+    $launcher=Start-Process $env:ComSpec -ArgumentList ('/d /c ""'+$launcherFolder+'\Setup.cmd""') -PassThru
+    if (-not $launcher.WaitForExit(90000)) { $launcher.Kill(); throw 'Setup.cmd did not finish.' }
+    if ($launcher.ExitCode -ne 0) { throw 'Setup.cmd reported installation failure.' }
+    $running=Get-CimInstance Win32_Process -Filter "Name='ExplorerManager.Desktop.exe'" | Where-Object { $_.ExecutablePath -eq "$install\Desktop\ExplorerManager.Desktop.exe" }
+    if (-not $running) { throw 'Setup.cmd did not launch the installed Desktop.' }
+    Write-Host 'PASS: packaged Setup.cmd from a Unicode/space path, upgrade and installed Desktop launch.'
 } finally {
     foreach ($process in @($newUi,$oldUi)) { if ($process -and -not $process.HasExited) { $process.Kill() } }
     if (Test-Path "$install/.explorermanager-install.json") { & "$repo/scripts/Uninstall.ps1" -InstallDirectory $install }

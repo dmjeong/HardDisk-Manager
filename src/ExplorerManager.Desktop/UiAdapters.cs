@@ -63,7 +63,7 @@ namespace ExplorerManager.Desktop
             if (dialog.ShowDialog(_owner) == true) File.WriteAllText(dialog.FileName, content, new UTF8Encoding(true));
             return Task.CompletedTask;
         }
-        public void Notify(string title, string message) => _notify(title, message.Length > 250 ? message.Substring(0, 250) : message);
+        public void Notify(string title, string message) { DesktopDiagnosticsLog.Write(title, message); _notify(title, message.Length > 250 ? message.Substring(0, 250) : message); }
         public void RunElevated()
         {
             Relaunch("");

@@ -100,8 +100,9 @@ namespace ExplorerManager.Desktop
                 await UntilAsync(async () => (await client.SendAsync<AppSettings>("Settings")).CacheBytes == 128L * 1048576, 20);
                 await client.SendAsync<object>("DeletePolicy", new { Id = id });
                 await client.SendAsync<object>("SaveSettings", new AppSettings());
-                File.WriteAllText(log, "PASS: UI setup/start; authenticated service; real volumes/CPU/disk; dropdown selection/text; invalid input correction; policy save; real preview; saved invalid numeric input retained; real delete/history/RAM restore; settings persisted; X closes desktop.");
-                window.Close();
+                File.WriteAllText(log, "PASS: UI setup/start; authenticated service; real volumes/CPU/disk; dropdown selection/text; invalid input correction; policy save; real preview; saved invalid numeric input retained; real delete/history/RAM restore; settings persisted; Hide/Show/Exit works.");
+                vm.HideCommand.Execute(null); Require(!window.IsVisible, "Hide to tray hides the window");
+                window.Show(); await LayoutAsync(window); Invoke(Find<Button>(window, "Exit Explorer Manager"));
             }
             catch (Exception ex) { File.WriteAllText(log, ex + Environment.NewLine + vm.Status + Environment.NewLine + vm.Message); System.Windows.Application.Current.Shutdown(10); }
         }
