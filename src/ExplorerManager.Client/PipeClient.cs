@@ -11,8 +11,10 @@ using Newtonsoft.Json.Linq;
 
 namespace ExplorerManager.Client
 {
-    public sealed class PipeClient : IExplorerClient
+    public sealed class PipeClient : IExplorerClient, IDesktopDiagnostics
     {
+        private readonly WindowsDesktopIntegration _desktop = new WindowsDesktopIntegration();
+        public Task<DesktopStatus> ReadDesktopStatusAsync(CancellationToken cancellation) => _desktop.ReadDesktopStatusAsync(cancellation);
         public async Task<T> SendAsync<T>(string command, object data = null, CancellationToken cancellation = default(CancellationToken))
         {
             var request = new Request { Command = command, Data = data == null ? new JObject() : JObject.FromObject(data) };

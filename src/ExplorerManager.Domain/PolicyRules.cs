@@ -1,30 +1,40 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ExplorerManager.Domain
 {
     public static class PolicyRules
     {
-        public static IList<string> Validate(DrivePolicy p)
+        public static IList<string> Validate(DrivePolicy p) => ValidateFields(p).Values.SelectMany(x => x).Distinct().ToList();
+        public static IDictionary<string, List<string>> ValidateFields(DrivePolicy p)
         {
-            var errors = new List<string>();
-            if (p == null) { errors.Add("정책이 없습니다."); return errors; }
-            if (string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 100) errors.Add("정책 이름은 1~100자입니다.");
-            if (string.IsNullOrWhiteSpace(p.VolumeId)) errors.Add("볼륨을 선택하세요.");
-            if (p.Roots == null || p.Roots.Count == 0 || p.Roots.Count > 100) errors.Add("관리 경로를 1~100개 등록하세요.");
-            if (!Enum.IsDefined(typeof(ThresholdMode), p.ThresholdMode) || !Enum.IsDefined(typeof(AgeBasis), p.AgeBasis)) errors.Add("정책 모드가 잘못되었습니다.");
-            if (double.IsNaN(p.StartThreshold) || double.IsInfinity(p.StartThreshold) ||
-                double.IsNaN(p.StopThreshold) || double.IsInfinity(p.StopThreshold)) errors.Add("용량 기준은 유한한 숫자여야 합니다.");
-            if (p.ThresholdMode == ThresholdMode.FreeBytes)
-            { if (p.StartThreshold < 0 || p.StopThreshold <= p.StartThreshold) errors.Add("여유 공간 종료값은 시작값보다 커야 합니다."); }
-            else if (p.StopThreshold < 0 || p.StartThreshold <= p.StopThreshold ||
-                     (p.ThresholdMode == ThresholdMode.UsedPercent && p.StartThreshold > 100))
-                errors.Add("사용량 종료값은 시작값보다 작아야 합니다.");
-            if (p.RetentionDays < 1 || p.RetentionDays > 36500) errors.Add("보관 기간은 1~36500일입니다.");
-            if (p.IntervalSeconds < 10 || p.CooldownSeconds < 10 || p.MaxScanSeconds < 1 || p.MaxRunSeconds < 1) errors.Add("점검/대기 간격은 10초 이상이어야 합니다.");
-            if (p.MaxItems < 1 || p.MaxItems > 1000000 || p.MaxDeleteBytes < 1 || p.ReadBytesPerSecond < 65536) errors.Add("작업 상한 또는 읽기 속도를 확인하세요.");
-            if (!HasValidSchedule(p)) errors.Add("실행 요일과 시간대를 확인하세요. 종료 시각 24:00은 허용되며 시작과 종료는 달라야 합니다.");
-            if (p.RestoreProtectionHours < 1 || p.RestoreProtectionHours > 8760) errors.Add("복구 보호 기간은 1~8760시간입니다.");
+            var errors = new Dictionary<string, List<string>>();
+            Action<string, string> add = (field, message) => { List<string> list; if (!errors.TryGetValue(field, out list)) errors[field] = list = new List<string>(); list.Add(message); };
+            if (p == null) { add("", "정책이 없습니다."); return errors; }
+            if (string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 100) add(nameof(p.Name), "정책 이름은 1~100자입니다.");
+            if (string.IsNullOrWhiteSpace(p.VolumeId)) add(nameof(p.VolumeId), "Target volume을 선택하세요.");
+            if (p.Roots == null || p.Roots.Count == 0 || p.Roots.Count > 100) add(nameof(p.Roots), "관리할 폴더를 1~100개 등록하세요.");
+            if (!Enum.IsDefined(typeof(ThresholdMode), p.ThresholdMode)) add(nameof(p.ThresholdMode), "용량 기준 종류를 선택하세요.");
+            if (!Enum.IsDefined(typeof(AgeBasis), p.AgeBasis)) add(nameof(p.AgeBasis), "파일 시각 기준을 선택하세요.");
+            bool finite = !double.IsNaN(p.StartThreshold) && !double.IsInfinity(p.StartThreshold) && !double.IsNaN(p.StopThreshold) && !double.IsInfinity(p.StopThreshold);
+            if (!finite || p.StartThreshold < 0 || p.StopThreshold < 0 || (p.ThresholdMode == ThresholdMode.UsedPercent && (p.StartThreshold > 100 || p.StopThreshold > 100)))
+            { add(nameof(p.StartThreshold), "용량 기준은 0 이상의 유한한 숫자이며 사용률은 100% 이내입니다."); add(nameof(p.StopThreshold), "용량 기준은 0 이상의 유한한 숫자이며 사용률은 100% 이내입니다."); }
+            else if (p.ThresholdMode == ThresholdMode.FreeBytes ? p.StopThreshold <= p.StartThreshold : p.StopThreshold >= p.StartThreshold)
+            {
+                string message = p.ThresholdMode == ThresholdMode.FreeBytes ? "여유 공간 종료값은 시작값보다 커야 합니다." : "사용량 종료값은 시작값보다 작아야 합니다.";
+                add(nameof(p.StartThreshold), message); add(nameof(p.StopThreshold), message);
+            }
+            if (p.RetentionDays < 1 || p.RetentionDays > 36500) add(nameof(p.RetentionDays), "보관 기간은 1~36500일입니다.");
+            if (p.IntervalSeconds < 10) add(nameof(p.IntervalSeconds), "점검 주기는 10초 이상입니다.");
+            if (p.CooldownSeconds < 10) add(nameof(p.CooldownSeconds), "재실행 대기는 10초 이상입니다.");
+            if (p.MaxScanSeconds < 1) add(nameof(p.MaxScanSeconds), "스캔 제한은 1초 이상입니다.");
+            if (p.MaxRunSeconds < 1) add(nameof(p.MaxRunSeconds), "삭제 제한은 1초 이상입니다.");
+            if (p.MaxItems < 1 || p.MaxItems > 1000000) add(nameof(p.MaxItems), "처리 항목 상한은 1~1000000입니다.");
+            if (p.MaxDeleteBytes < 1) add(nameof(p.MaxDeleteBytes), "1회 삭제 상한은 0보다 커야 합니다.");
+            if (p.ReadBytesPerSecond < 65536) add(nameof(p.ReadBytesPerSecond), "읽기 속도는 0.0625 MiB/s 이상입니다.");
+            if (!HasValidSchedule(p)) add("Schedule", "실행 요일과 시간대를 확인하세요. 종료 시각 24:00은 허용되며 시작과 종료는 달라야 합니다.");
+            if (p.RestoreProtectionHours < 1 || p.RestoreProtectionHours > 8760) add(nameof(p.RestoreProtectionHours), "복구 보호 기간은 1~8760시간입니다.");
             return errors;
         }
 

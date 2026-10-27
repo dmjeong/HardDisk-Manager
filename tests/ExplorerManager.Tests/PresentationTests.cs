@@ -292,9 +292,69 @@ namespace ExplorerManager.Tests
             command.CanExecuteChanged += handler; command.Execute(null);
             return completion.Task;
         }
+        [Fact] public void PolicyValidationIsFieldSpecificAndCorrectingInputsClearsIt()
+        {
+            var p = new PolicyEditor(new DrivePolicy());
+            Assert.Empty(p.GetErrors(nameof(p.Name))); Assert.NotEmpty(p.GetErrors(nameof(p.Roots))); Assert.NotEmpty(p.GetErrors(nameof(p.VolumeId)));
+            var fields = new List<string>(); p.ErrorsChanged += (sender, args) => fields.Add(args.PropertyName);
+            p.Roots = @"D:\archive"; p.VolumeId = "volume"; Assert.False(p.HasErrors); Assert.Empty(p.ErrorSummary);
+            p.RetentionDays = 0; Assert.NotEmpty(p.GetErrors(nameof(p.RetentionDays))); Assert.Empty(p.GetErrors(nameof(p.Name))); Assert.Contains("보관 기간", p.ErrorSummary);
+            p.RetentionDays = 30; Assert.False(p.HasErrors); Assert.Contains(nameof(p.RetentionDays), fields);
+            p.Start = 80; Assert.NotEmpty(p.GetErrors(nameof(p.Stop))); p.Stop = 70; Assert.False(p.HasErrors);
+        }
+        [Fact] public void EmptyComboTransitionDoesNotEraseSelectedVolumeAndSavedVersionPreservesNewEdits()
+        {
+            var p = new PolicyEditor(new DrivePolicy { VolumeId = "v", Roots = new List<string> { @"D:\archive" } });
+            p.VolumeId = null; Assert.Equal("v", p.VolumeId);
+            long version = p.EditVersion; p.Name = "New edit"; p.AcceptSaved(new DrivePolicy { Version = 1 }, version);
+            Assert.Equal(1, p.Version); Assert.Equal("New edit", p.Name); Assert.True(p.IsDirty);
+            p.AcceptSaved(new DrivePolicy { Version = 2 }, p.EditVersion); Assert.False(p.IsDirty);
+        }
+        [Fact] public async Task RecoveryFailureDoesNotDisconnectWorkingDashboardOrEraseCpuAndVolumes()
+        {
+            var client = new FakeClient { FailRecovery = true }; client.State.Metrics.Add(new Metric { Entity = "CPU", Name = "CPU", Value = 42, Unit = "%" });
+            var vm = new MainViewModel(client, new FakeUi()); await vm.RefreshAsync();
+            Assert.True(vm.IsServiceConnected); Assert.Equal("42 %", vm.CpuText); Assert.Single(vm.Volumes); Assert.Contains("일부", vm.Message);
+        }
+        [Fact] public async Task LocalDiagnosticsAreExplicitlyReadOnlyAndKeepDraftsWhenServiceIsMissing()
+        {
+            var client = new LocalClient(); var vm = new MainViewModel(client, new FakeUi()); await vm.RefreshAsync();
+            Assert.False(vm.IsServiceConnected); Assert.True(vm.IsLocalReadOnly); Assert.True(vm.ShowConnectionHelp); Assert.Equal("13 %", vm.CpuText); Assert.Single(vm.Volumes);
+            vm.NewCommand.Execute(null); vm.SelectedPolicy.Roots = @"D:\archive"; string id = vm.SelectedPolicy.Id; await vm.RefreshAsync();
+            Assert.Equal(id, vm.SelectedPolicy.Id); Assert.Equal("v", vm.SelectedPolicy.VolumeId); Assert.True(vm.SelectedPolicy.IsDirty);
+            await ExecuteAsync(vm.SaveCommand); Assert.Contains("서비스 설치/시작", vm.Message); Assert.Equal(0, vm.SelectedPolicy.Version);
+        }
+        [Fact] public async Task DesktopCommandsDistinguishHideExitAndSetup()
+        {
+            var ui = new HostUi(); var vm = new MainViewModel(new FakeClient(), ui);
+            vm.HideCommand.Execute(null); Assert.Equal(1, ui.Hidden); Assert.Equal(0, ui.Exited);
+            vm.ExitCommand.Execute(null); Assert.Equal(1, ui.Exited);
+            await ExecuteAsync(vm.SetupServiceCommand); Assert.Equal(1, ui.Setups); Assert.True(vm.IsServiceConnected);
+        }
+        private sealed class LocalClient : IExplorerClient, IDesktopDiagnostics
+        {
+            public Task<T> SendAsync<T>(string command, object data = null, CancellationToken cancellation = default(CancellationToken)) => throw new InvalidOperationException("Service not installed");
+            public Task CloseProcessesAsync(UnlockTicket ticket, bool force, CancellationToken cancellation) => throw new NotSupportedException();
+            public Task<DesktopStatus> ReadDesktopStatusAsync(CancellationToken cancellation) => Task.FromResult(new DesktopStatus { ServiceState = "NotInstalled", Volumes = new List<VolumeStatus> { new VolumeStatus { Id = "v", Mount = @"D:\", FileSystem = "NTFS", TotalBytes = 1000, FreeBytes = 500 } }, Metrics = new List<Metric> { new Metric { Entity = "CPU", Name = "CPU", Value = 13, Unit = "%" } } });
+        }
+        private sealed class HostUi : IUiServices, IDesktopHost
+        {
+            public int Setups, Exited, Hidden;
+            public Task SetupServiceAsync() { Setups++; return Task.CompletedTask; }
+            public void HideToTray() { Hidden++; }
+            public void ExitDesktop() { Exited++; }
+            public bool InputsValid => true;
+            public Task<bool> ConfirmAsync(string title, string text) => Task.FromResult(false);
+            public Task<int> ShowLockAlertAsync(AlertRecord alert) => Task.FromResult(0);
+            public Task<string> PickFolderAsync() => Task.FromResult<string>(null);
+            public Task SaveTextAsync(string name, string text) => Task.CompletedTask;
+            public void Notify(string title, string message) { }
+            public void RunElevated() { }
+        }
         private sealed class FakeClient : IExplorerClient
         {
             public bool FailDashboard { get; set; }
+            public bool FailRecovery { get; set; }
             public bool FailSettingsSave { get; set; }
             public int DashboardRequests { get; private set; }
             public int RecoveryRequests { get; private set; }
@@ -326,7 +386,7 @@ namespace ExplorerManager.Tests
                         if (FailDashboard) throw new InvalidOperationException("연결 실패");
                         if (NextDashboardReply != null) { var pending = NextDashboardReply; NextDashboardReply = null; return (Task<T>)(object)pending.Task; }
                         value = State; break;
-                    case "Recovery": RecoveryRequests++; value = RecoveryItems; break;
+                    case "Recovery": RecoveryRequests++; if (FailRecovery) throw new InvalidOperationException("Recovery error"); value = RecoveryItems; break;
                     case "Folders": value = Array.Empty<FolderSummary>(); break;
                     case "History": value = new HistoryPage(); break;
                     case "Settings": SettingsRequests++; value = CopySettings(SettingsData); break;

@@ -41,6 +41,12 @@ namespace ExplorerManager.Presentation
         void Notify(string title, string message);
         void RunElevated();
     }
+    public interface IDesktopHost
+    {
+        Task SetupServiceAsync();
+        void HideToTray();
+        void ExitDesktop();
+    }
     public sealed class ActionCommand : ICommand
     {
         private readonly Action _action;

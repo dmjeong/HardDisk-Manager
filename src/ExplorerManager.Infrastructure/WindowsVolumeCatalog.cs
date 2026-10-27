@@ -15,9 +15,9 @@ namespace ExplorerManager.Infrastructure
             var result = new List<VolumeStatus>();
             foreach (var drive in DriveInfo.GetDrives())
             {
-                if (drive.DriveType != DriveType.Fixed) continue;
+                if (drive.DriveType != DriveType.Fixed && drive.DriveType != DriveType.Removable) continue;
                 try { result.Add(Read(drive.RootDirectory.FullName)); }
-                catch (Exception ex) { result.Add(new VolumeStatus { Mount = drive.Name, State = "Unavailable: " + ex.Message }); }
+                catch (Exception ex) { result.Add(new VolumeStatus { Id = "unavailable:" + drive.Name, Mount = drive.Name, State = "Unavailable: " + ex.Message }); }
             }
             return result;
         }

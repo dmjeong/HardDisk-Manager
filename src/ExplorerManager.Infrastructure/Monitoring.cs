@@ -18,8 +18,7 @@ namespace ExplorerManager.Infrastructure
 {
     public sealed class Monitoring : IDisposable
     {
-        [StructLayout(LayoutKind.Sequential)] private struct Memory { public uint Length, Load; public ulong Total, Available, TotalPage, AvailablePage, TotalVirtual, AvailableVirtual, AvailableExtended; }
-        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GlobalMemoryStatusEx(ref Memory memory);
+        private readonly ExplorerManager.Platform.WindowsTelemetry _nativeTelemetry = new ExplorerManager.Platform.WindowsTelemetry();
         private readonly SqliteJournal _store;
         private readonly Action<Exception> _error;
         private readonly object _sync = new object();
@@ -93,12 +92,9 @@ namespace ExplorerManager.Infrastructure
                     while (!ct.IsCancellationRequested)
                     {
                         var samples = pdh.Read().ToList();
-                        var memory = new Memory { Length = (uint)Marshal.SizeOf(typeof(Memory)) };
-                        if (GlobalMemoryStatusEx(ref memory))
-                        {
-                            samples.Add(new Metric { Entity = "RAM", Name = "AvailableRAM", Value = memory.Available / 1073741824.0, Unit = "GiB", Provider = "Windows" });
-                            samples.Add(new Metric { Entity = "RAM", Name = "UsedRAM", Value = (memory.Total - memory.Available) / 1073741824.0, Unit = "GiB", Provider = "Windows" });
-                        }
+                        foreach (var metric in _nativeTelemetry.Read())
+                            if (metric.Name != "CPU" || !samples.Any(x => x.Entity == "CPU" && x.Name == "CPU" && x.Quality == "Valid" && x.Value.HasValue))
+                            { if (metric.Name == "CPU") samples.RemoveAll(x => x.Entity == "CPU" && x.Name == "CPU"); samples.Add(metric); }
                         lock (_sync)
                         {
                             if ((DateTime.UtcNow - _sensorUtc).TotalSeconds < 20) samples.AddRange(_sensorMetrics);

@@ -17,11 +17,12 @@ namespace ExplorerManager.Infrastructure
         [DllImport("pdh.dll")] private static extern uint PdhCloseQuery(IntPtr query);
         private IntPtr _query;
         private bool _warmed;
+        private readonly List<string> _failures = new List<string>();
         private readonly Dictionary<string, Tuple<IntPtr, string, double>> _counters = new Dictionary<string, Tuple<IntPtr, string, double>>();
         public PdhReader()
         {
             uint rc = PdhOpenQueryW(null, IntPtr.Zero, out _query);
-            if (rc != 0) throw new InvalidOperationException("PDH 조회 실패: " + rc);
+            if (rc != 0) { _failures.Add("PDH query 0x" + rc.ToString("x8")); return; }
             Add("CPU", @"\Processor(_Total)\% Processor Time", "%", 1);
             Add("ReadBytes", @"\PhysicalDisk(*)\Disk Read Bytes/sec", "MiB/s", 1.0 / 1048576);
             Add("WriteBytes", @"\PhysicalDisk(*)\Disk Write Bytes/sec", "MiB/s", 1.0 / 1048576);
@@ -35,12 +36,16 @@ namespace ExplorerManager.Infrastructure
         private void Add(string name, string path, string unit, double scale)
         {
             IntPtr counter;
-            if (PdhAddEnglishCounterW(_query, path, IntPtr.Zero, out counter) == 0) _counters.Add(name, Tuple.Create(counter, unit, scale));
+            uint code = PdhAddEnglishCounterW(_query, path, IntPtr.Zero, out counter);
+            if (code == 0) _counters.Add(name, Tuple.Create(counter, unit, scale)); else _failures.Add(name + " 0x" + code.ToString("x8"));
         }
         public IList<Metric> Read()
         {
             var result = new List<Metric>();
-            if (PdhCollectQueryData(_query) != 0) { _warmed = false; return result; }
+            if (_query == IntPtr.Zero) { result.Add(Diagnostic(string.Join(", ", _failures))); return result; }
+            uint collected = PdhCollectQueryData(_query);
+            if (collected != 0) { _warmed = false; result.Add(Diagnostic("PDH collect 0x" + collected.ToString("x8"))); return result; }
+            if (_failures.Count > 0) result.Add(Diagnostic(string.Join(", ", _failures)));
             foreach (var counter in _counters)
             {
                 if (counter.Key == "CPU")
@@ -76,6 +81,7 @@ namespace ExplorerManager.Infrastructure
             }
             _warmed = true; return result;
         }
+        private static Metric Diagnostic(string detail) => new Metric { Entity = "Storage", Name = "PDH", Quality = "Unavailable", Provider = "Windows", Detail = "일부 Windows 성능 카운터를 조회할 수 없습니다: " + detail };
         public void Dispose() { if (_query != IntPtr.Zero) { PdhCloseQuery(_query); _query = IntPtr.Zero; } }
     }
 }

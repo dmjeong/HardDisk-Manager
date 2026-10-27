@@ -7,13 +7,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ExplorerManager.Domain;
+using ExplorerManager.Client;
 using ExplorerManager.Presentation;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 
 namespace ExplorerManager.Desktop
 {
-    internal sealed class UiAdapters : IUiServices, ITransferUiServices
+    internal sealed class UiAdapters : IUiServices, ITransferUiServices, IDesktopHost
     {
         private readonly Window _owner;
         private readonly Action<string, string> _notify;
@@ -65,7 +66,19 @@ namespace ExplorerManager.Desktop
         public void Notify(string title, string message) => _notify(title, message.Length > 250 ? message.Substring(0, 250) : message);
         public void RunElevated()
         {
-            Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName) { UseShellExecute = true, Verb = "runas" });
+            Relaunch("");
         }
+        private void Relaunch(string arguments)
+        {
+            using (var process = Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName, arguments) { UseShellExecute = true, Verb = "runas", WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory }))
+                if (process != null) ExitDesktop();
+        }
+        public async Task SetupServiceAsync()
+        {
+            if (!WindowsDesktopIntegration.IsAdministrator) { Relaunch("--setup-service"); return; }
+            await WindowsDesktopIntegration.EnsureServiceAsync(AppDomain.CurrentDomain.BaseDirectory);
+        }
+        public void HideToTray() => _owner.Hide();
+        public void ExitDesktop() => System.Windows.Application.Current.Shutdown();
     }
 }

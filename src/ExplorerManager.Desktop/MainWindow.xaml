@@ -83,6 +83,7 @@
        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="지금 정리" Command="{Binding RunCommand}" Margin="0,0,8,0"/><Button Content="Preview" Command="{Binding PreviewCommand}" Margin="0,0,8,0"/><Button Content="Save policy" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}"/></StackPanel>
       </DockPanel></Border>
       <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0"><StackPanel>
+       <Border Background="{StaticResource DangerSoftBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,16" Visibility="{Binding SelectedPolicy.HasErrors,Converter={StaticResource BoolVisibility}}"><StackPanel><TextBlock Text="저장 전에 아래 항목을 수정하세요" FontWeight="SemiBold"/><TextBlock Text="{Binding SelectedPolicy.ErrorSummary}" TextWrapping="Wrap" Foreground="{StaticResource DangerBrush}" Margin="0,8,0,0" AutomationProperties.Name="Policy validation errors"/></StackPanel></Border>
        <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel>
         <TextBlock Text="General" Style="{StaticResource SectionTitle}"/><TextBlock Text="삭제는 아래에 등록한 폴더 안에서만 수행됩니다." Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,20"/>
         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>

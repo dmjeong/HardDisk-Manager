@@ -16,7 +16,6 @@ namespace ExplorerManager.Desktop
     {
         private Forms.NotifyIcon _tray;
         private DispatcherTimer _timer;
-        private bool _exit;
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -34,15 +33,22 @@ namespace ExplorerManager.Desktop
             _tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "Explorer Manager", Visible = true };
             var menu = new Forms.ContextMenuStrip();
             menu.Items.Add("열기", null, (s, a) => Dispatcher.Invoke(() => { window.Show(); window.WindowState = WindowState.Normal; window.Activate(); }));
-            menu.Items.Add("화면 종료 (서비스 계속 실행)", null, (s, a) => Dispatcher.Invoke(() => { _exit = true; Shutdown(); }));
+            menu.Items.Add("Exit · 화면 종료", null, (s, a) => Dispatcher.Invoke(() => Shutdown()));
             _tray.ContextMenuStrip = menu;
             _tray.DoubleClick += (s, a) => Dispatcher.Invoke(() => { window.Show(); window.WindowState = WindowState.Normal; window.Activate(); });
-            window.Closing += (s, a) => { if (!_exit) { a.Cancel = true; window.Hide(); } };
             window.Show();
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _timer.Tick += async (s, a) => await vm.RefreshAsync();
             _timer.Start();
             _ = vm.RefreshAsync();
+            if (e.Args.Contains("--offline-smoke") || e.Args.Contains("--workflow-smoke"))
+            {
+                int output = Array.IndexOf(e.Args, "--test-output"), workflow = Array.IndexOf(e.Args, "--workflow-smoke");
+                if (output < 0 || output + 1 >= e.Args.Length) { Shutdown(11); return; }
+                _ = DesktopWorkflowCheck.RunAsync(window, vm, e.Args.Contains("--offline-smoke"), workflow >= 0 && workflow + 1 < e.Args.Length ? e.Args[workflow + 1] : null, Path.GetFullPath(e.Args[output + 1]));
+                return;
+            }
+            if (e.Args.Contains("--setup-service")) vm.SetupServiceCommand.Execute(null);
             bool smoke = e.Args.Contains("--smoke");
             if (smoke)
             {
@@ -84,10 +90,10 @@ namespace ExplorerManager.Desktop
                             }
                         }
                         listener.Flush(); string errors = bindingOutput.ToString();
-                        if (!string.IsNullOrWhiteSpace(errors)) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-binding-errors.log"), errors); _exit = true; Shutdown(2); return; }
-                        _exit = true; Shutdown(0);
+                        if (!string.IsNullOrWhiteSpace(errors)) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-binding-errors.log"), errors); Shutdown(2); return; }
+                        Shutdown(0);
                     }
-                    catch (Exception ex) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-smoke-error.log"), ex.ToString()); _exit = true; Shutdown(3); }
+                    catch (Exception ex) { File.WriteAllText(Path.Combine(outputDirectory, "wpf-smoke-error.log"), ex.ToString()); Shutdown(3); }
                 };
                 finish.Start();
             }

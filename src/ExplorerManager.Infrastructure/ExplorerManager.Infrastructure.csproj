@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Monitoring.cs" />
+    <Compile Include="..\SharedWindowsTelemetry.cs"><Link>Platform\WindowsTelemetry.cs</Link></Compile>
     <Compile Include="NativeMethods.cs" />
     <Compile Include="PdhReader.cs" />
     <Compile Include="PipeServer.cs" />

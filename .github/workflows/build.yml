@@ -29,6 +29,9 @@ jobs:
         run: |
           msbuild src/ExplorerManager.Desktop/ExplorerManager.Desktop.csproj /t:ResolveReferences /p:Configuration=Release /p:DesignTimeBuild=true /p:BuildingInsideVisualStudio=true /nologo /verbosity:minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: First-run desktop, setup, real controls and policy workflow
+        shell: powershell
+        run: ./scripts/Desktop-Workflow.ps1
       - name: Service install, authenticated IPC, WPF render, uninstall
         shell: powershell
         run: ./scripts/Smoke.ps1

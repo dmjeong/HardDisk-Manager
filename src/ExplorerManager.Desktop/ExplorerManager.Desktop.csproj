@@ -18,6 +18,7 @@
     <Compile Include="DisplayConverter.cs" />
     <Compile Include="UiPreviewClient.cs" />
     <Compile Include="UiAdapters.cs" />
+    <Compile Include="DesktopWorkflowCheck.cs" />
     <Compile Include="Views\TransfersView.xaml.cs"><DependentUpon>TransfersView.xaml</DependentUpon></Compile>
   </ItemGroup>
   <ItemGroup>
@@ -31,6 +32,8 @@
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <Reference Include="UIAutomationProvider" />
+    <Reference Include="UIAutomationTypes" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="WindowsBase" />
@@ -43,6 +46,19 @@
     <ProjectReference Include="..\ExplorerManager.Contracts\ExplorerManager.Contracts.csproj"><Project>{C1C0C0C5-5F70-4695-AE7F-F118C342CB93}</Project><Name>ExplorerManager.Contracts</Name></ProjectReference>
     <ProjectReference Include="..\ExplorerManager.Domain\ExplorerManager.Domain.csproj"><Project>{1326ABB1-DF7F-4C51-B6DB-F641CD19CC1F}</Project><Name>ExplorerManager.Domain</Name></ProjectReference>
     <ProjectReference Include="..\ExplorerManager.Presentation\ExplorerManager.Presentation.csproj"><Project>{EE39B1B0-91CB-4DB9-A607-F930F417AC24}</Project><Name>ExplorerManager.Presentation</Name></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.Service\ExplorerManager.Service.csproj"><Project>{757AED93-A097-4A50-8DA1-07AB7CE82975}</Project><Name>ExplorerManager.Service</Name><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference>
+    <ProjectReference Include="..\ExplorerManager.SensorHost\ExplorerManager.SensorHost.csproj"><Project>{0297E54B-E388-4C3C-A0D1-A11161FA9990}</Project><Name>ExplorerManager.SensorHost</Name><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="PrepareDesktopSetup" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' and '$(StageDesktopSetup)' != 'false'">
+    <ItemGroup>
+      <_SetupService Include="$(MSBuildProjectDirectory)\..\ExplorerManager.Service\bin\$(Configuration)\net48\**\*" />
+      <_SetupSensors Include="$(MSBuildProjectDirectory)\..\ExplorerManager.SensorHost\bin\$(Configuration)\net48\**\*" />
+      <_SetupDesktop Include="$(TargetDir)**\*" Exclude="$(TargetDir)Setup\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SetupService)" DestinationFiles="@(_SetupService->'$(TargetDir)Setup\app\Service\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SetupSensors)" DestinationFiles="@(_SetupSensors->'$(TargetDir)Setup\app\SensorHost\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SetupDesktop)" DestinationFiles="@(_SetupDesktop->'$(TargetDir)Setup\app\Desktop\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\scripts\Install.ps1" DestinationFolder="$(TargetDir)Setup" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

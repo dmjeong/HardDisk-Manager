@@ -12,6 +12,7 @@ namespace ExplorerManager.Presentation
     {
         private readonly DrivePolicy _policy;
         public bool IsDirty { get; private set; }
+        public long EditVersion { get; private set; }
         public PolicyEditor(DrivePolicy p)
         {
             _policy = p; IsDirty = p.Version == 0;
@@ -22,7 +23,7 @@ namespace ExplorerManager.Presentation
         public string Id => _policy.Id;
         public int Version => _policy.Version;
         public string Name { get => _policy.Name; set { _policy.Name = value; Edit(); } }
-        public string VolumeId { get => _policy.VolumeId; set { if (_policy.VolumeId != value) { _policy.VolumeId = value; Edit(); } } }
+        public string VolumeId { get => _policy.VolumeId; set { if (!string.IsNullOrWhiteSpace(value) && _policy.VolumeId != value) { _policy.VolumeId = value; Edit(); } } }
         public bool Enabled { get => _policy.Enabled; set { _policy.Enabled = value; Edit(); } }
         public ThresholdMode Mode { get => _policy.ThresholdMode; set { _policy.ThresholdMode = value; Edit(); } }
         public AgeBasis AgeBasis { get => _policy.AgeBasis; set { _policy.AgeBasis = value; Edit(); } }
@@ -61,7 +62,11 @@ namespace ExplorerManager.Presentation
         public string Excluded { get => _excluded; set { _excluded = value; Edit(); } }
         public string Extensions { get => _extensions; set { _extensions = value; Edit(); } }
         private void Edit([System.Runtime.CompilerServices.CallerMemberName] string name = null)
-        { IsDirty = true; Changed(name); Changed(nameof(IsDirty)); Changed(nameof(HasErrors)); ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs("")); }
+        {
+            IsDirty = true; EditVersion++; Changed(name); Changed(nameof(IsDirty)); Changed(nameof(HasErrors)); Changed(nameof(ErrorSummary));
+            // Notify every dependent field, but return only that field's own errors.
+            foreach (string field in ErrorFields) ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs(field));
+        }
         public DrivePolicy ToPolicy()
         {
             ApplyTimeDrafts();
@@ -69,6 +74,8 @@ namespace ExplorerManager.Presentation
             _policy.ExcludedExtensions = (_extensions ?? "").Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
             return _policy;
         }
+        public void AcceptSaved(DrivePolicy saved, long editVersion)
+        { _policy.Version = saved.Version; if (EditVersion == editVersion) IsDirty = false; Changed(nameof(Version)); Changed(nameof(IsDirty)); }
         private void ApplyTimeDrafts()
         {
             int hour, minute;
@@ -97,7 +104,31 @@ namespace ExplorerManager.Presentation
             return errors;
         }
         public bool HasErrors => ValidationErrors().Count > 0;
-        public IEnumerable GetErrors(string propertyName) => ValidationErrors();
+        private static readonly string[] ErrorFields = { nameof(Name), nameof(VolumeId), nameof(Roots), nameof(Mode), nameof(AgeBasis), nameof(Start), nameof(Stop), nameof(RetentionDays), nameof(Interval), nameof(Cooldown), nameof(ScanLimit), nameof(RunLimit), nameof(ItemLimit), nameof(DeleteLimitGiB), nameof(ReadMiB), nameof(StartTime), nameof(EndTime), nameof(ProtectionHours), nameof(RunMonday), nameof(RunTuesday), nameof(RunWednesday), nameof(RunThursday), nameof(RunFriday), nameof(RunSaturday), nameof(RunSunday) };
+        public string ErrorSummary => string.Join(Environment.NewLine, ValidationErrors().Distinct().Select(x => "• " + x));
+        public IEnumerable GetErrors(string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName)) return ValidationErrors();
+            string field = propertyName;
+            switch (propertyName)
+            {
+                case nameof(Mode): field = nameof(DrivePolicy.ThresholdMode); break;
+                case nameof(Start): field = nameof(DrivePolicy.StartThreshold); break;
+                case nameof(Stop): field = nameof(DrivePolicy.StopThreshold); break;
+                case nameof(Interval): field = nameof(DrivePolicy.IntervalSeconds); break;
+                case nameof(Cooldown): field = nameof(DrivePolicy.CooldownSeconds); break;
+                case nameof(ScanLimit): field = nameof(DrivePolicy.MaxScanSeconds); break;
+                case nameof(RunLimit): field = nameof(DrivePolicy.MaxRunSeconds); break;
+                case nameof(ItemLimit): field = nameof(DrivePolicy.MaxItems); break;
+                case nameof(DeleteLimitGiB): field = nameof(DrivePolicy.MaxDeleteBytes); break;
+                case nameof(ReadMiB): field = nameof(DrivePolicy.ReadBytesPerSecond); break;
+                case nameof(ProtectionHours): field = nameof(DrivePolicy.RestoreProtectionHours); break;
+                case nameof(StartTime): case nameof(EndTime):
+                case nameof(RunMonday): case nameof(RunTuesday): case nameof(RunWednesday): case nameof(RunThursday): case nameof(RunFriday): case nameof(RunSaturday): case nameof(RunSunday): field = "Schedule"; break;
+            }
+            List<string> errors;
+            return PolicyRules.ValidateFields(ToPolicy()).TryGetValue(field, out errors) ? (IEnumerable)errors : Array.Empty<string>();
+        }
         public event EventHandler<DataErrorsChangedEventArgs> ErrorsChanged;
         public override string ToString() => Name;
     }
