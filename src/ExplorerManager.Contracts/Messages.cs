@@ -10,6 +10,7 @@ namespace ExplorerManager.Contracts
 {
     public static class Protocol
     {
+        public static string ProductVersion => ((System.Reflection.AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(typeof(Protocol).Assembly, typeof(System.Reflection.AssemblyInformationalVersionAttribute)))?.InformationalVersion ?? "1.0.0";
         public const string PipeName = "ExplorerManager.v1";
         public const int Version = 1;
         public const int MaxFrameBytes = 2 * 1024 * 1024;
@@ -36,7 +37,7 @@ namespace ExplorerManager.Contracts
     }
     public sealed class Dashboard
     {
-        public string Version { get; set; } = "1.0.0";
+        public string Version { get; set; } = Protocol.ProductVersion;
         public DateTime Utc { get; set; }
         public bool IsOperator { get; set; }
         public bool Paused { get; set; }

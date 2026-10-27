@@ -25,15 +25,17 @@ Windows 11 x64 또는 Windows Server 2022/2025 Desktop Experience와 .NET Framew
 
 1. [Actions](https://github.com/dmjeong/HardDisk-Manager/actions)에서 성공한 실행의 `ExplorerManager-win-x64` artifact를 받습니다.
 2. 그 안의 `ExplorerManager-win-x64.zip`을 완전히 압축 해제합니다.
-3. Desktop.exe를 실행하고 **서비스 설치/시작**을 누르거나 관리자 Windows PowerShell 5.1에서 `./Install.ps1`을 실행합니다. Windows 권한 확인창을 승인하면 서비스와 센서를 설치합니다.
+3. **Setup.cmd를 더블클릭**하고 Windows 권한 확인창을 승인합니다. 신규 설치와 기존 버전 업데이트 모두 같은 방법을 사용합니다. 실행 중인 설치본 Desktop을 닫고 프로그램과 서비스를 함께 교체하며 정책·설정·이력은 유지합니다. 서비스 재시작으로 RAM 복구본은 소멸하므로 필요한 파일은 먼저 복구하세요. 관리자 PowerShell의 `./Install.ps1`도 지원합니다.
 4. Policies의 **Grant access…**로 관리 폴더에 서비스 권한을 부여하거나 실행합니다: `./Grant-ManagedRoot.ps1 -Path 'D:\Archive'`.
-5. WPF 앱을 관리자 권한으로 실행하고 **Save policy → Preview → 결과 확인 → 자동 정리 활성화** 순서로 설정합니다.
+5. WPF 앱은 실행 시 필요한 관리자 권한을 요청합니다. **Save policy → Preview → 결과 확인 → 자동 정리 활성화** 순서로 설정합니다.
 
 삭제 서비스 이름은 `ExplorerManager`(전용 가상 계정), 하드웨어 센서 서비스는 `ExplorerManagerSensors`(LocalSystem)입니다. 센서 서비스는 측정값만 제공하며 삭제·프로세스 종료 명령을 받지 않습니다. `Install.ps1 -NoHardwareSensors`로 관리자 센서를 제외할 수 있습니다.
 
 데이터는 `%ProgramData%\ExplorerManager\Data`입니다. X 또는 Exit는 Desktop 프로세스를 종료합니다. Hide to tray는 창만 숨기며, 어느 쪽이든 Windows Service는 별도로 계속 실행됩니다. 기본 설치는 설치한 운영자 계정의 로그인 시 UI를 관리자 권한으로 실행하는 작업을 등록합니다.
 
 자동 삭제는 설치 직후 비활성 상태입니다. 수동 정리도 용량·기간·보호 규칙을 그대로 적용합니다. NAS/UNC, USB 자동 정리, ReFS는 v1 대상에 포함하지 않습니다.
+
+Desktop과 Service 버전은 왼쪽 아래에 표시합니다. 버전이 다르면 **서비스 업데이트** 안내가 나오며, 새 패키지의 Desktop에서 업데이트를 실행할 수 있습니다. 설치 실패·앱 오류 기록은 **Diagnostics logs** 또는 `%LocalAppData%\ExplorerManager\Logs`에서 확인합니다.
 
 ## 삭제 규칙
 

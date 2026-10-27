@@ -78,6 +78,8 @@ namespace ExplorerManager.Desktop
             if (!WindowsDesktopIntegration.IsAdministrator) { Relaunch("--setup-service"); return; }
             await WindowsDesktopIntegration.EnsureServiceAsync(AppDomain.CurrentDomain.BaseDirectory);
         }
+        public Task UpdateServiceAsync() => WindowsDesktopIntegration.UpdateServiceAsync(AppDomain.CurrentDomain.BaseDirectory);
+        public void OpenDiagnostics() { Directory.CreateDirectory(DesktopDiagnosticsLog.DirectoryPath); Process.Start(new ProcessStartInfo(DesktopDiagnosticsLog.DirectoryPath) { UseShellExecute = true }); }
         public void HideToTray() => _owner.Hide();
         public Task GrantFolderAccessAsync(string path) => WindowsDesktopIntegration.GrantFolderAccessAsync(AppDomain.CurrentDomain.BaseDirectory, path);
         public void ExitDesktop() => System.Windows.Application.Current.Shutdown();

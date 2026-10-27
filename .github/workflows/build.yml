@@ -17,6 +17,8 @@ jobs:
       MSBuildEnableWorkloadResolver: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: microsoft/setup-msbuild@v2
       - name: Build WPF, service, sensor host and package
         shell: powershell
@@ -32,6 +34,9 @@ jobs:
       - name: First-run desktop, setup, real controls and policy workflow
         shell: powershell
         run: ./scripts/Desktop-Workflow.ps1
+      - name: Upgrade from 1.0.1 with installed Desktop running
+        shell: powershell
+        run: ./scripts/Upgrade-Workflow.ps1
       - name: Service install, authenticated IPC, WPF render, uninstall
         shell: powershell
         run: ./scripts/Smoke.ps1
@@ -46,6 +51,7 @@ jobs:
               Select-Object TimeCreated,Id,ProviderName,Message | Format-List | Out-File "artifacts/$log-events.log"
           }
           Copy-Item "$env:ProgramData/ExplorerManager/Data/*.log" artifacts -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/ExplorerManager/Logs/*.log" artifacts -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:

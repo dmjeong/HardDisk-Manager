@@ -69,13 +69,33 @@ namespace ExplorerManager.Client
                     return; // Never reinstall a running service or discard its RAM recovery cache.
                 }
             }
+            await RunInstallerAsync(applicationDirectory, false).ConfigureAwait(false);
+        }
+        public static Task UpdateServiceAsync(string applicationDirectory) => RunInstallerAsync(applicationDirectory, true);
+        private static async Task RunInstallerAsync(string applicationDirectory, bool update)
+        {
+            if (!IsAdministrator) throw new UnauthorizedAccessException("관리자 권한으로 Desktop을 실행하세요.");
             string installer = FindInstaller(applicationDirectory);
+            string installedDirectory = null;
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\ExplorerManager"))
+            {
+                string path = key?.GetValue("ImagePath") as string;
+                if (!string.IsNullOrWhiteSpace(path)) {
+                    path = Environment.ExpandEnvironmentVariables(path).Trim();
+                    if (path.StartsWith("\"", StringComparison.Ordinal)) { int end = path.IndexOf('"', 1); if (end > 1) path = path.Substring(1, end - 1); }
+                    if (string.Equals(Path.GetFileName(path), "ExplorerManager.Service.exe", StringComparison.OrdinalIgnoreCase)) installedDirectory = Path.GetDirectoryName(Path.GetDirectoryName(path));
+                }
+            }
+            bool replacingThisDesktop = update && installedDirectory != null && string.Equals(Path.GetFullPath(applicationDirectory).TrimEnd('\\'), Path.Combine(installedDirectory, "Desktop"), StringComparison.OrdinalIgnoreCase);
             var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
-                "-NoProfile -ExecutionPolicy Bypass -File \"" + installer + "\" -NoStartUi") { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(installer), WindowStyle = ProcessWindowStyle.Normal };
+                "-NoProfile -ExecutionPolicy Bypass -File \"" + installer + "\"" + (replacingThisDesktop ? "" : " -NoStartUi"))
+                { UseShellExecute = replacingThisDesktop, WorkingDirectory = Path.GetDirectoryName(installer), CreateNoWindow = !replacingThisDesktop, RedirectStandardOutput = !replacingThisDesktop, RedirectStandardError = !replacingThisDesktop };
             using (var process = Process.Start(info))
             {
+                var output = replacingThisDesktop ? Task.FromResult("") : process.StandardOutput.ReadToEndAsync(); var error = replacingThisDesktop ? Task.FromResult("") : process.StandardError.ReadToEndAsync();
                 await Task.Run(() => process.WaitForExit()).ConfigureAwait(false);
-                if (process.ExitCode != 0) throw new InvalidOperationException("서비스 설치에 실패했습니다. 설치 창의 오류와 Windows 서비스 권한을 확인하세요. (" + process.ExitCode + ")");
+                string detail = (await error.ConfigureAwait(false)).Trim(); await output.ConfigureAwait(false);
+                if (process.ExitCode != 0) throw new InvalidOperationException("서비스 설치/업데이트 실패: " + detail + "\n로그: " + Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"ExplorerManager\Logs"));
             }
         }
         public static async Task GrantFolderAccessAsync(string applicationDirectory, string path)
@@ -88,6 +108,19 @@ namespace ExplorerManager.Client
             if (script == null) throw new FileNotFoundException("권한 설정 스크립트를 찾을 수 없습니다. 최신 전체 패키지로 설치하세요.");
             var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"), "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -Path \"" + path.TrimEnd('\\') + "\"") { UseShellExecute = true, Verb = "runas" };
             using (var process = Process.Start(info)) { await Task.Run(() => process.WaitForExit()).ConfigureAwait(false); if (process.ExitCode != 0) throw new InvalidOperationException("폴더 권한 설정에 실패했습니다. 보호 경로·junction·관리자 권한을 확인하세요."); }
+        }
+    }
+    public static class DesktopDiagnosticsLog
+    {
+        private static readonly object Sync = new object();
+        public static string DirectoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"ExplorerManager\Logs");
+        public static void Write(string category, string detail)
+        {
+            lock (Sync) try {
+                Directory.CreateDirectory(DirectoryPath); string path = Path.Combine(DirectoryPath, "desktop.log");
+                if (File.Exists(path) && new FileInfo(path).Length > 2 * 1024 * 1024) { string old = path + ".previous"; if (File.Exists(old)) File.Delete(old); File.Move(path, old); }
+                File.AppendAllText(path, DateTime.UtcNow.ToString("O") + " [" + category + "] " + detail + Environment.NewLine, Encoding.UTF8);
+            } catch (Exception) { /* Diagnostics must never prevent the UI from starting or closing. */ }
         }
     }
 }

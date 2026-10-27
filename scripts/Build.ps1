@@ -11,7 +11,7 @@ New-Item "$stage/Service","$stage/Desktop","$stage/SensorHost" -ItemType Directo
 Copy-Item "$repo/src/ExplorerManager.Service/bin/$Configuration/net48/*" "$stage/Service" -Recurse -Force
 Copy-Item "$repo/src/ExplorerManager.SensorHost/bin/$Configuration/net48/*" "$stage/SensorHost" -Recurse -Force
 Get-ChildItem "$repo/src/ExplorerManager.Desktop/bin/$Configuration/net48" -Exclude Setup | Copy-Item -Destination "$stage/Desktop" -Recurse -Force
-Copy-Item "$repo/scripts/Install.ps1","$repo/scripts/Uninstall.ps1","$repo/scripts/Grant-ManagedRoot.ps1" "$repo/artifacts" -Force
+Copy-Item "$repo/scripts/Setup.cmd","$repo/scripts/Install.ps1","$repo/scripts/Uninstall.ps1","$repo/scripts/Grant-ManagedRoot.ps1" "$repo/artifacts" -Force
 Copy-Item "$repo/README.md","$repo/THIRD-PARTY-NOTICES.md" "$repo/artifacts" -Force
 if (Test-Path "$repo/artifacts/licenses") { Remove-Item "$repo/artifacts/licenses" -Recurse -Force }
 Copy-Item "$repo/licenses" "$repo/artifacts/licenses" -Recurse -Force
@@ -24,5 +24,5 @@ if ($CertificateThumbprint) {
 }
 $zip = Join-Path $repo 'artifacts/ExplorerManager-win-x64.zip'
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path "$stage","$repo/artifacts/Install.ps1","$repo/artifacts/Uninstall.ps1","$repo/artifacts/Grant-ManagedRoot.ps1","$repo/artifacts/README.md","$repo/artifacts/THIRD-PARTY-NOTICES.md","$repo/artifacts/licenses" -DestinationPath $zip
+Compress-Archive -Path "$stage","$repo/artifacts/Setup.cmd","$repo/artifacts/Install.ps1","$repo/artifacts/Uninstall.ps1","$repo/artifacts/Grant-ManagedRoot.ps1","$repo/artifacts/README.md","$repo/artifacts/THIRD-PARTY-NOTICES.md","$repo/artifacts/licenses" -DestinationPath $zip
 Write-Host "Package: $zip"

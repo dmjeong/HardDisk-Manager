@@ -69,7 +69,7 @@ namespace ExplorerManager.Infrastructure
                 Guard(WatchInterlocksAsync, "Interlocks"),
                 Guard(() => _transfers.RunAsync(_stop.Token), "Transfers")
             };
-            _store.RecordEvent("ServiceStarted", "Service", _cache.Epoch, "v1.0.0");
+            _store.RecordEvent("ServiceStarted", "Service", _cache.Epoch, Protocol.ProductVersion);
         }
         private async Task Guard(Func<Task> run, string name)
         {

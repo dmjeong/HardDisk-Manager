@@ -10,3 +10,12 @@
 4. 정책 오류는 해당 필드에만 표시하고 수정할 내용을 요약한다. 자동 갱신/ComboBox가 초안을 지우지 않는다.
 5. 일부 부가 조회나 성능 카운터 실패가 정상 Dashboard 전체를 지우지 않도록 격리한다.
 6. 기존 시험 외에 서비스 없는 시작→설치/시작→볼륨/센서→잘못된 정책 수정/저장→정상 종료의 실제 Windows UI 흐름을 검증한다.
+# Follow-up: installed application reliability (1.0.2)
+
+The user reports persistent failures after 1.0.1. Reopen acceptance: the earlier clean-install CI run did not exercise upgrades with an installed Desktop running or invalid numeric drafts on an already saved policy. Verify these paths before claiming resolution.
+
+- Detect Desktop/service version mismatches and provide an explicit update action and durable installation diagnostics.
+- Install/update from a double-click launcher; close only the installed Desktop before replacing locked binaries, wait for services, preserve configuration/history, and recover prior binaries on failure.
+- Preserve policy editor instances, invalid numeric text and every unsaved draft through periodic refresh and policy selection changes.
+- Refresh history after real operations, and test actual delete/recovery/settings as well as Preview.
+- Keep WPF/.NET Framework 4.8, MVVM and all existing deletion safety checks.

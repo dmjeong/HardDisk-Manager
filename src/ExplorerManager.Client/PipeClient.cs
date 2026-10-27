@@ -17,6 +17,11 @@ namespace ExplorerManager.Client
         public Task<DesktopStatus> ReadDesktopStatusAsync(CancellationToken cancellation) => _desktop.ReadDesktopStatusAsync(cancellation);
         public async Task<T> SendAsync<T>(string command, object data = null, CancellationToken cancellation = default(CancellationToken))
         {
+            try { return await SendCoreAsync<T>(command, data, cancellation).ConfigureAwait(false); }
+            catch (Exception ex) { DesktopDiagnosticsLog.Write(command, ex.ToString()); throw; }
+        }
+        private async Task<T> SendCoreAsync<T>(string command, object data, CancellationToken cancellation)
+        {
             var request = new Request { Command = command, Data = data == null ? new JObject() : JObject.FromObject(data) };
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
             {

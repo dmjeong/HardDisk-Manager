@@ -19,6 +19,9 @@ namespace ExplorerManager.Desktop
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            DesktopDiagnosticsLog.Write("Startup", "Desktop " + ExplorerManager.Contracts.Protocol.ProductVersion + " / Administrator=" + WindowsDesktopIntegration.IsAdministrator + " / " + AppDomain.CurrentDomain.BaseDirectory);
+            DispatcherUnhandledException += (sender, args) => DesktopDiagnosticsLog.Write("Unhandled UI error", args.Exception.ToString());
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) => DesktopDiagnosticsLog.Write("Unhandled process error", args.ExceptionObject?.ToString());
             if (e.Args.Contains("--smoke"))
             {
                 int logAt = Array.IndexOf(e.Args, "--screenshot");
@@ -41,6 +44,12 @@ namespace ExplorerManager.Desktop
             _timer.Tick += async (s, a) => await vm.RefreshAsync();
             _timer.Start();
             _ = vm.RefreshAsync();
+            if (e.Args.Contains("--upgrade-smoke"))
+            {
+                int fixture = Array.IndexOf(e.Args, "--upgrade-smoke"), output = Array.IndexOf(e.Args, "--test-output");
+                if (fixture + 1 >= e.Args.Length || output < 0 || output + 1 >= e.Args.Length) { Shutdown(11); return; }
+                _ = DesktopWorkflowCheck.UpgradeAsync(window, vm, Path.GetFullPath(e.Args[fixture + 1]), Path.GetFullPath(e.Args[output + 1])); return;
+            }
             if (e.Args.Contains("--offline-smoke") || e.Args.Contains("--workflow-smoke"))
             {
                 int output = Array.IndexOf(e.Args, "--test-output"), workflow = Array.IndexOf(e.Args, "--workflow-smoke");

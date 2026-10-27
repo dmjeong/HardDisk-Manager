@@ -21,3 +21,10 @@ Monitoring은 GetSystemTimes CPU fallback과 PDH 실패 상태를 제공한다. 
 ## 검증
 
 필드별 오류와 수정 후 해제, 신규 정책 편집 보존, 부가 조회 실패 격리, 로컬 진단 상태를 단위 시험한다. Windows에서는 실제 미설치/설치된 서비스, CPU/볼륨 실측, WPF ComboBox 항목·텍스트 입력·오류 해제·정책 저장·X 종료를 확인한다. 예시 데이터 렌더링은 동작 검증으로 세지 않는다.
+# Follow-up design: 1.0.2
+
+Version comes from shared assembly metadata, including the Dashboard response. The UI displays both versions and an update banner for an older backend; an explicit update explains that service restart clears the RAM recovery cache. A newer backend requires its matching Desktop and must never be downgraded implicitly. Existing-service setup only starts; update is a separate action. Normal Desktop execution requests the administrator token required by every authenticated IPC operation.
+
+The installer validates the complete package before stopping anything, stages and backs up binaries in the protected installation directory, closes only Desktop processes whose executable path matches the installed path, waits for both service processes to stop, and replaces binaries. Failure restores the previous files and service state. Log output is retained under the invoking user's LocalAppData. Setup.cmd elevates via Windows PowerShell without requiring a terminal. Sensor/optional login-task setup failures must not prevent the core service from starting.
+
+Policy collection reconciliation uses policy ID and version: keep the same editor for an unchanged version, keep all dirty/new drafts, accept newer server versions for clean editors, and remove only deleted saved clean entries. Refresh no longer resets WPF conversion-error text on saved policies. History is refreshed on changes in run outcome/cache usage and while the History page is active. CI covers live upgrades, saved invalid input across refresh, multiple drafts, settings persistence, actual fixture deletion and RAM restoration.

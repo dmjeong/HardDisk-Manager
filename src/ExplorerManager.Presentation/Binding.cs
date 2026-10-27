@@ -44,8 +44,10 @@ namespace ExplorerManager.Presentation
     public interface IDesktopHost
     {
         Task SetupServiceAsync();
+        Task UpdateServiceAsync();
         Task GrantFolderAccessAsync(string path);
         void HideToTray();
+        void OpenDiagnostics();
         void ExitDesktop();
     }
     public sealed class ActionCommand : ICommand

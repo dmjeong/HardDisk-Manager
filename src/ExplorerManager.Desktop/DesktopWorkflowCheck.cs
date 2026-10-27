@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerManager.Client;
+using ExplorerManager.Domain;
 using ExplorerManager.Contracts;
 using ExplorerManager.Presentation;
 
@@ -69,16 +70,62 @@ namespace ExplorerManager.Desktop
                 await UntilAsync(() => vm.SelectedPolicy?.Id == id && vm.SelectedPolicy.Version > 0 && !vm.SelectedPolicy.IsDirty, 25);
                 var client = new PipeClient(); var saved = (await client.SendAsync<Dashboard>("Dashboard")).Policies.Single(x => x.Id == id);
                 Require(saved.VolumeId == target.Id && saved.Roots.Single() == root && !saved.Enabled, "Edited policy is persisted by the real service");
+                // Conversion errors on a saved policy must survive the 3-second refresh.
+                var savedEditor = vm.SelectedPolicy; start.Text = "unfinished-number"; await LayoutAsync(window);
+                await Task.Delay(4000); await vm.RefreshAsync(); await LayoutAsync(window);
+                Require(ReferenceEquals(savedEditor, vm.SelectedPolicy) && start.Text == "unfinished-number" && Validation.GetHasError(start), "Polling preserves invalid numeric input on saved policies");
+                start.Text = "90"; await LayoutAsync(window);
+                Invoke(FindButton(window, "Save policy")); await UntilAsync(() => !vm.SelectedPolicy.IsDirty, 25);
                 Invoke(FindButton(window, "Preview"));
                 await UntilAsync(async () => (await client.SendAsync<Dashboard>("Dashboard")).Runs.Any(x => x.PolicyId == id && x.FinishedUtc.HasValue), 35);
                 var history = await client.SendAsync<HistoryPage>("History");
                 Require(history.Items.Any(x => x.PolicyId == id && x.State == "WouldDelete" && x.Path == Path.Combine(root, "expired.txt")), "Preview inspects the real fixture file");
                 Require(File.Exists(Path.Combine(root, "expired.txt")), "Preview preserves source file");
+                // Exercise actual deletion, RAM cache and restore with only this isolated fixture.
+                saved = (await client.SendAsync<Dashboard>("Dashboard")).Policies.Single(x => x.Id == id);
+                saved.ThresholdMode = ThresholdMode.FreeBytes; saved.StartThreshold = (double)target.TotalBytes + 1048576; saved.StopThreshold = saved.StartThreshold + 1;
+                saved = await client.SendAsync<DrivePolicy>("SavePolicy", saved);
+                await vm.RefreshAsync(); await UntilAsync(() => vm.SelectedPolicy.Version == saved.Version, 15);
+                Invoke(FindButton(window, "지금 정리"));
+                await UntilAsync(() => !File.Exists(Path.Combine(root, "expired.txt")), 35);
+                await UntilAsync(async () => (await client.SendAsync<RecoveryInfo[]>("Recovery")).Any(x => x.Path == Path.Combine(root, "expired.txt")), 15);
+                await UntilAsync(() => vm.History.Any(x => x.PolicyId == id && x.State == "DeletedConfirmed"), 20);
+                await UntilAsync(async () => (await client.SendAsync<Dashboard>("Dashboard")).Runs.Any(x => x.PolicyId == id && !x.DryRun && x.FinishedUtc.HasValue), 15);
+                var copy = (await client.SendAsync<RecoveryInfo[]>("Recovery")).Single(x => x.Path == Path.Combine(root, "expired.txt"));
+                await client.SendAsync<string>("Restore", new { copy.Id });
+                await UntilAsync(() => File.Exists(Path.Combine(root, "expired.txt")), 20);
+                Require(File.ReadAllText(Path.Combine(root, "expired.txt")).Trim() == "Real UI workflow fixture", "RAM restore preserves original bytes");
+                window.Sections.SelectedIndex = 6; await LayoutAsync(window);
+                vm.CacheCapacityMiB = 128; Invoke(FindButton(window, "Save changes"));
+                await UntilAsync(async () => (await client.SendAsync<AppSettings>("Settings")).CacheBytes == 128L * 1048576, 20);
                 await client.SendAsync<object>("DeletePolicy", new { Id = id });
-                File.WriteAllText(log, "PASS: UI setup/start; authenticated service; real volumes/CPU/disk; dropdown selection/text; invalid input correction; policy save; real preview; source preserved; X closes desktop.");
+                await client.SendAsync<object>("SaveSettings", new AppSettings());
+                File.WriteAllText(log, "PASS: UI setup/start; authenticated service; real volumes/CPU/disk; dropdown selection/text; invalid input correction; policy save; real preview; saved invalid numeric input retained; real delete/history/RAM restore; settings persisted; X closes desktop.");
                 window.Close();
             }
             catch (Exception ex) { File.WriteAllText(log, ex + Environment.NewLine + vm.Status + Environment.NewLine + vm.Message); System.Windows.Application.Current.Shutdown(10); }
+        }
+        public static async Task UpgradeAsync(MainWindow window, MainViewModel vm, string root, string log)
+        {
+            try {
+                Require(Path.GetFileName(root).StartsWith("ExplorerManager-UI-", StringComparison.Ordinal) && Directory.Exists(root), "Isolated upgrade fixture required");
+                await UntilAsync(() => vm.IsServiceConnected, 30);
+                Require(vm.RequiresServiceUpdate && vm.ShowConnectionHelp && !vm.IsServiceNewer, "Old service must display update action while connected");
+                await LayoutAsync(window); Require(Find<Button>(window, "Set up background service").Content.ToString() == "서비스 업데이트", "Visible update button");
+                var client = new PipeClient(); var original = await client.SendAsync<AppSettings>("Settings");
+                var changed = await client.SendAsync<AppSettings>("Settings"); changed.HistoryDays = 123;
+                await client.SendAsync<object>("SaveSettings", changed);
+                var volume = vm.Volumes.First(x => x.HasCapacity && root.StartsWith(x.Mount, StringComparison.OrdinalIgnoreCase));
+                var policy = await client.SendAsync<DrivePolicy>("SavePolicy", new DrivePolicy { Name = "Upgrade sentinel", VolumeId = volume.Id, Roots = new System.Collections.Generic.List<string> { root } });
+                await WindowsDesktopIntegration.UpdateServiceAsync(AppDomain.CurrentDomain.BaseDirectory);
+                await UntilAsync(() => vm.IsServiceConnected && !vm.RequiresServiceUpdate, 40);
+                var state = await client.SendAsync<Dashboard>("Dashboard");
+                Require(state.Version == Protocol.ProductVersion && state.Policies.Any(x => x.Id == policy.Id && x.Roots.Single() == root), "Updated service preserves policy and reports actual version");
+                Require((await client.SendAsync<AppSettings>("Settings")).HistoryDays == 123, "Upgrade preserves settings");
+                await client.SendAsync<object>("DeletePolicy", new { policy.Id }); await client.SendAsync<object>("SaveSettings", original);
+                File.WriteAllText(log, "PASS: real 1.0.1 installed service; live old Desktop; visible version mismatch/update action; update installer; matching versions; policy/settings preserved; new Desktop exits.");
+                window.Close();
+            } catch (Exception ex) { File.WriteAllText(log, ex + Environment.NewLine + vm.Status + Environment.NewLine + vm.Message); System.Windows.Application.Current.Shutdown(12); }
         }
         private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         private static async Task LayoutAsync(MainWindow window) { await window.Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ContextIdle); }

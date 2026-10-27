@@ -331,6 +331,40 @@ namespace ExplorerManager.Tests
             vm.ExitCommand.Execute(null); Assert.Equal(1, ui.Exited);
             await ExecuteAsync(vm.SetupServiceCommand); Assert.Equal(1, ui.Setups); Assert.True(vm.IsServiceConnected);
         }
+        [Fact] public async Task RefreshKeepsSavedEditorAndEveryUnselectedDraft()
+        {
+            var client = new FakeClient(); var vm = new MainViewModel(client, new FakeUi());
+            await vm.RefreshAsync(); var saved = vm.SelectedPolicy;
+            await vm.RefreshAsync(); Assert.Same(saved, vm.SelectedPolicy);
+            vm.NewCommand.Execute(null); var first = vm.SelectedPolicy; first.Name = "First draft";
+            vm.NewCommand.Execute(null); var second = vm.SelectedPolicy; second.Name = "Second draft";
+            vm.SelectedPolicy = saved; await vm.RefreshAsync();
+            Assert.Contains(first, vm.Policies); Assert.Contains(second, vm.Policies); Assert.Same(saved, vm.SelectedPolicy);
+            client.State.Policies.Clear(); await vm.RefreshAsync();
+            Assert.DoesNotContain(saved, vm.Policies); Assert.Contains(first, vm.Policies); Assert.Contains(second, vm.Policies);
+        }
+        [Fact] public async Task VersionMismatchIsVisibleEvenWithWorkingServiceAndClearsAfterUpdate()
+        {
+            var client = new FakeClient(); client.State.Version = "0.9.0";
+            var vm = new MainViewModel(client, new FakeUi()); await vm.RefreshAsync();
+            Assert.True(vm.IsServiceConnected); Assert.True(vm.RequiresServiceUpdate); Assert.True(vm.ShowConnectionHelp);
+            Assert.Same(vm.UpdateServiceCommand, vm.ServiceActionCommand); Assert.False(vm.IsServiceNewer);
+            Assert.Contains("0.9.0", vm.VersionText);
+            client.State.Version = Protocol.ProductVersion; await vm.RefreshAsync();
+            Assert.False(vm.RequiresServiceUpdate); Assert.False(vm.ShowConnectionHelp);
+            client.State.Version = "99.0.0"; await vm.RefreshAsync(); Assert.True(vm.IsServiceNewer);
+            await ExecuteAsync(vm.UpdateServiceCommand); Assert.Contains("새 버전", vm.Message);
+        }
+        [Fact] public async Task OperationCompletionRefreshesHistoryWithoutUserRefresh()
+        {
+            var client = new FakeClient(); var vm = new MainViewModel(client, new FakeUi()); await vm.RefreshAsync();
+            int before = client.Commands.FindAll(c => c == "History").Count;
+            await vm.RefreshAsync(); Assert.Equal(before, client.Commands.FindAll(c => c == "History").Count);
+            client.State.Runs.Add(new RunRecord { Id = "run", State = "Deleting" }); await vm.RefreshAsync();
+            Assert.Equal(before + 1, client.Commands.FindAll(c => c == "History").Count);
+            client.State.Runs[0].State = "TargetReached"; client.State.Runs[0].FinishedUtc = DateTime.UtcNow;
+            await vm.RefreshAsync(); Assert.Equal(before + 2, client.Commands.FindAll(c => c == "History").Count);
+        }
         private sealed class LocalClient : IExplorerClient, IDesktopDiagnostics
         {
             public Task<T> SendAsync<T>(string command, object data = null, CancellationToken cancellation = default(CancellationToken)) => throw new InvalidOperationException("Service not installed");
@@ -341,8 +375,10 @@ namespace ExplorerManager.Tests
         {
             public int Setups, Exited, Hidden;
             public Task SetupServiceAsync() { Setups++; return Task.CompletedTask; }
+            public Task UpdateServiceAsync() => Task.CompletedTask;
             public Task GrantFolderAccessAsync(string path) => Task.CompletedTask;
             public void HideToTray() { Hidden++; }
+            public void OpenDiagnostics() { }
             public void ExitDesktop() { Exited++; }
             public bool InputsValid => true;
             public Task<bool> ConfirmAsync(string title, string text) => Task.FromResult(false);

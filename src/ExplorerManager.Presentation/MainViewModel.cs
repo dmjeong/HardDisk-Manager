@@ -31,7 +31,7 @@ namespace ExplorerManager.Presentation
         private bool _isServiceConnected, _isPaused, _connectionFailed, _isLocalReadOnly;
         private DesktopStatus _desktopStatus;
         private DateTime _lastUpdatedUtc;
-        private string _health;
+        private string _health, _serviceVersion, _historySignature;
         private long _cacheUsed, _cacheCapacity;
         private int _enabledPolicyCount;
         public MainViewModel(IExplorerClient client, IUiServices ui)
@@ -46,8 +46,13 @@ namespace ExplorerManager.Presentation
             SaveCommand = Command(SavePolicyAsync);
             DeleteCommand = Command(async () =>
             {
-                if (SelectedPolicy != null && await _ui.ConfirmAsync("정책 삭제", SelectedPolicy.Name + " 정책을 삭제하시겠습니까?"))
-                { await _client.SendAsync<object>("DeletePolicy", new { SelectedPolicy.Id }); SelectedPolicy = null; await RefreshAsync(true); }
+                var editor = SelectedPolicy;
+                if (editor != null && await _ui.ConfirmAsync("정책 삭제", editor.Name + " 정책을 삭제하시겠습니까?"))
+                {
+                    if (editor.Version > 0) await _client.SendAsync<object>("DeletePolicy", new { editor.Id });
+                    Policies.Remove(editor); if (ReferenceEquals(SelectedPolicy, editor)) SelectedPolicy = null;
+                    await RefreshAfterCommandAsync();
+                }
             });
             AddRootCommand = Command(async () => {
                 string path = await _ui.PickFolderAsync(); if (path == null || SelectedPolicy == null) return;
@@ -108,6 +113,13 @@ namespace ExplorerManager.Presentation
             });
             ElevateCommand = Command(() => { _ui.RunElevated(); return Task.CompletedTask; });
             SetupServiceCommand = Command(async () => { Message = "서비스 설치·시작 중입니다. Windows 권한 확인창과 설치 창을 확인하세요."; await Host().SetupServiceAsync(); await RefreshAfterCommandAsync(); });
+            UpdateServiceCommand = Command(async () => {
+                if (IsServiceNewer) throw new InvalidOperationException("서비스보다 새 버전의 Desktop 패키지로 실행하세요.");
+                if (!await _ui.ConfirmAsync("서비스 업데이트", "설치된 Desktop과 서비스를 새 버전으로 교체합니다. 정책·설정·이력은 유지됩니다. 저장하지 않은 편집과 RAM 복구본은 사라지므로 필요한 파일을 먼저 복구하세요.")) return;
+                Message = "서비스 업데이트 중입니다. 설치 결과와 로그를 확인하세요.";
+                await Host().UpdateServiceAsync(); await RefreshAfterCommandAsync();
+            });
+            LogsCommand = new ActionCommand(() => Host().OpenDiagnostics());
             HideCommand = new ActionCommand(() => Host().HideToTray());
             ExitCommand = new ActionCommand(() => Host().ExitDesktop());
             GrantAccessCommand = Command(async () => {
@@ -188,9 +200,14 @@ namespace ExplorerManager.Presentation
         }
         public bool IsServiceConnected => _isServiceConnected;
         public bool IsLocalReadOnly => _isLocalReadOnly;
-        public bool ShowConnectionHelp => !IsServiceConnected;
-        public string ConnectionTitle => _desktopStatus?.ServiceState == "NotInstalled" ? "백그라운드 서비스가 설치되지 않았습니다" : _desktopStatus?.IsAdministrator == false ? "서비스 제어에는 관리자 실행이 필요합니다" : "백그라운드 서비스에 연결할 수 없습니다";
-        public string ConnectionDetail => (_isLocalReadOnly ? "현재 PC의 볼륨·CPU·RAM을 읽기 전용으로 표시합니다. 정책 저장과 자동 정리는 서비스 연결 후 사용할 수 있습니다. " : "서비스 설치·시작 버튼으로 연결을 준비하세요. ") + (_desktopStatus?.Detail ?? "");
+        public bool RequiresServiceUpdate => IsServiceConnected && !string.Equals(_serviceVersion, Protocol.ProductVersion, StringComparison.Ordinal);
+        public bool IsServiceNewer { get { Version service, desktop; return Version.TryParse(_serviceVersion, out service) && Version.TryParse(Protocol.ProductVersion, out desktop) && service > desktop; } }
+        public string VersionText => "Desktop " + Protocol.ProductVersion + " · Service " + (_serviceVersion ?? "—");
+        public AsyncCommand ServiceActionCommand => RequiresServiceUpdate ? UpdateServiceCommand : SetupServiceCommand;
+        public string ServiceActionText => RequiresServiceUpdate ? "서비스 업데이트" : "서비스 설치/시작";
+        public bool ShowConnectionHelp => !IsServiceConnected || RequiresServiceUpdate;
+        public string ConnectionTitle => RequiresServiceUpdate ? "Desktop과 백그라운드 서비스 버전이 다릅니다" : _desktopStatus?.ServiceState == "NotInstalled" ? "백그라운드 서비스가 설치되지 않았습니다" : _desktopStatus?.IsAdministrator == false ? "서비스 제어에는 관리자 실행이 필요합니다" : "백그라운드 서비스에 연결할 수 없습니다";
+        public string ConnectionDetail => RequiresServiceUpdate ? VersionText + (IsServiceNewer ? ". 서비스와 동일한 버전의 Desktop 패키지를 사용하세요." : ". 서비스 업데이트를 실행하면 설치된 프로그램도 함께 교체됩니다.") : (_isLocalReadOnly ? "현재 PC의 볼륨·CPU·RAM을 읽기 전용으로 표시합니다. 정책 저장과 자동 정리는 서비스 연결 후 사용할 수 있습니다. " : "서비스 설치·시작 버튼으로 연결을 준비하세요. ") + (_desktopStatus?.Detail ?? "");
         public bool IsPaused => _isPaused;
         public string ServiceText => _isLocalReadOnly && !IsServiceConnected ? "Local · 읽기 전용" : !IsServiceConnected ? (_connectionFailed ? "서비스 연결 끊김" : "서비스 연결 대기") : IsPaused ? "자동 정리 일시정지" : "백그라운드 서비스 연결됨";
         public string HealthText => !IsServiceConnected ? "상태 확인 필요" : DisplayText.State(_health);
@@ -280,8 +297,10 @@ namespace ExplorerManager.Presentation
         public AsyncCommand SaveSettingsCommand { get; }
         public AsyncCommand ElevateCommand { get; }
         public AsyncCommand SetupServiceCommand { get; }
+        public AsyncCommand UpdateServiceCommand { get; }
         public AsyncCommand GrantAccessCommand { get; }
         public ActionCommand HideCommand { get; }
+        public ActionCommand LogsCommand { get; }
         public ActionCommand ExitCommand { get; }
         public async Task RefreshAsync(bool discardPolicyChanges = false)
         {
@@ -293,7 +312,7 @@ namespace ExplorerManager.Presentation
             {
                 var state = await _client.SendAsync<Dashboard>("Dashboard");
                 if (state == null) throw new InvalidOperationException("Dashboard 응답이 비어 있습니다.");
-                dashboardReceived = true; _isLocalReadOnly = false;
+                dashboardReceived = true; _isLocalReadOnly = false; _serviceVersion = state.Version;
                 if (state.OperatorSettings != null) SetNotificationPreferences(state.OperatorSettings.LockedFileNotificationMode, state.OperatorSettings.LockedFileNotificationIntervalSeconds);
                 _isServiceConnected = true; _connectionFailed = false; _isPaused = state.Paused; _health = state.Health;
                 _lastUpdatedUtc = state.Utc; _cacheUsed = state.CacheUsed; _cacheCapacity = state.CacheCapacity;
@@ -305,12 +324,7 @@ namespace ExplorerManager.Presentation
                 await Transfers.RefreshAsync(state.TransfersAvailable);
                 Replace(Interlocks, state.Interlocks ?? new System.Collections.Generic.List<InterlockStatus>());
                 SelectedAlert = Alerts.FirstOrDefault(x => x.Id == alertId);
-                if (discardPolicyChanges || SelectedPolicy == null || (!SelectedPolicy.IsDirty && (state.Policies.FirstOrDefault(x => x.Id == SelectedPolicy.Id)?.Version ?? -1) >= SelectedPolicy.Version))
-                {
-                    string id = SelectedPolicy?.Id;
-                    Replace(Policies, state.Policies.Select(x => new PolicyEditor(x)));
-                    SelectedPolicy = Policies.FirstOrDefault(x => x.Id == id) ?? Policies.FirstOrDefault();
-                }
+                SyncPolicies(state.Policies, discardPolicyChanges);
                 Replace(Recovery, await _client.SendAsync<RecoveryInfo[]>("Recovery"));
                 SelectedRecovery = Recovery.FirstOrDefault(x => x.Id == recoveryId); RecoveryFolder = recoveryFolder;
                 Append(CpuSeries, state.Metrics.FirstOrDefault(x => x.Entity == "CPU" && x.Name == "CPU" && DisplayText.HasValue(x))?.Value);
@@ -329,9 +343,12 @@ namespace ExplorerManager.Presentation
                     if (state.OperatorSettings == null) SetNotificationPreferences(Settings.LockedFileNotificationMode, Settings.LockedFileNotificationIntervalSeconds);
                     _settingsLoaded = true;
                 }
-                if (!_historyLoaded)
+                string signature = state.CacheUsed + "|" + string.Join(";", state.Runs.Select(r => r.Id + ":" + r.State + ":" + r.FinishedUtc));
+                if (!_historyLoaded || signature != _historySignature || SelectedSection == 2)
                 {
-                    await LoadHistoryAsync(); _historyLoaded = true; Message = "준비되었습니다. 정책 저장 후 미리보기를 실행하세요.";
+                    await LoadHistoryAsync(); _historySignature = signature;
+                    if (!_historyLoaded) Message = "준비되었습니다. 정책 저장 후 미리보기를 실행하세요.";
+                    _historyLoaded = true;
                 }
                 var newAlarms = state.Alerts.Where(a => !a.Acknowledged && a.Category == "LockedFile" && !_seen.Contains(a.Id)).OrderByDescending(a => a.Utc).ToList();
                 foreach (var alarm in newAlarms) _seen.Add(alarm.Id);
@@ -465,9 +482,24 @@ namespace ExplorerManager.Presentation
         {
             foreach (string name in new[] { nameof(VolumeCountText), nameof(TotalFreeText), nameof(EnabledPolicyCountText), nameof(AlertCountText),
                 nameof(CachePercent), nameof(CacheSummary), nameof(CpuText), nameof(CpuTemperatureText), nameof(IsServiceConnected), nameof(IsPaused),
-                nameof(ServiceText), nameof(HealthText), nameof(LastUpdatedText), nameof(IsLocalReadOnly), nameof(ShowConnectionHelp), nameof(ConnectionTitle), nameof(ConnectionDetail) }) Changed(name);
+                nameof(ServiceText), nameof(HealthText), nameof(LastUpdatedText), nameof(IsLocalReadOnly), nameof(ShowConnectionHelp), nameof(ConnectionTitle), nameof(ConnectionDetail), nameof(RequiresServiceUpdate), nameof(IsServiceNewer), nameof(VersionText), nameof(ServiceActionCommand), nameof(ServiceActionText) }) Changed(name);
             NotifyDiskMetrics();
             NotifyInterlocks();
+        }
+        private void SyncPolicies(System.Collections.Generic.IList<DrivePolicy> saved, bool discard)
+        {
+            string selectedId = SelectedPolicy?.Id;
+            foreach (var editor in Policies.ToList())
+            {
+                var current = saved.FirstOrDefault(p => p.Id == editor.Id);
+                if (!discard && (editor.IsDirty || editor.Version == 0)) continue;
+                if (current == null) Policies.Remove(editor);
+                else if (discard || current.Version > editor.Version)
+                    Policies[Policies.IndexOf(editor)] = new PolicyEditor(current);
+            }
+            foreach (var policy in saved)
+                if (!Policies.Any(p => p.Id == policy.Id)) Policies.Add(new PolicyEditor(policy));
+            SelectedPolicy = Policies.FirstOrDefault(p => p.Id == selectedId) ?? Policies.FirstOrDefault();
         }
         private void SyncVolumes(Dashboard state)
         {
